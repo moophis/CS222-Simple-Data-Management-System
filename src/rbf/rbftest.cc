@@ -579,8 +579,8 @@ int RBFTest_8(RecordBasedFileManager *rbfm) {
     // Open the file "test_3"
     FileHandle fileHandle;
 
-//    rc = rbfm->openFile(fileName.c_str(), fileHandle);  // old test code
-    rc = rbfm->openFile(fileName, fileHandle);
+    rc = rbfm->openFile(fileName.c_str(), fileHandle);
+//    rc = rbfm->openFile(fileName, fileHandle);
     assert(rc == success);
 
     cout << "FileHandle: name -> " << fileHandle.getFileName() << endl;
@@ -651,8 +651,8 @@ int RBFTest_9(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &size
     string fileName = "test_4";
 
     // Create a file named "test_4"
-//    rc = rbfm->createFile(fileName.c_str());
-    rc = rbfm->createFile(fileName);
+    rc = rbfm->createFile(fileName.c_str());
+//    rc = rbfm->createFile(fileName);
     assert(rc == success);
 
     if(FileExists(fileName.c_str()))
@@ -668,14 +668,14 @@ int RBFTest_9(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &size
 
     // Open the file "test_4"
     FileHandle fileHandle;
-//    rc = rbfm->openFile(fileName.c_str(), fileHandle);
-    rc = rbfm->openFile(fileName, fileHandle);
+    rc = rbfm->openFile(fileName.c_str(), fileHandle);
+//    rc = rbfm->openFile(fileName, fileHandle);
     assert(rc == success);
 
 
     RID rid;
     void *record = malloc(1000);
-    int numRecords = 2000;
+    int numRecords = 5000;
 
     vector<Attribute> recordDescriptor;
     createLargeRecordDescriptor(recordDescriptor);
@@ -724,11 +724,11 @@ int RBFTest_10(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &siz
 
     // Open the file "test_4"
     FileHandle fileHandle;
-//    rc = rbfm->openFile(fileName.c_str(), fileHandle);
-    rc = rbfm->openFile(fileName, fileHandle);
+    rc = rbfm->openFile(fileName.c_str(), fileHandle);
+//    rc = rbfm->openFile(fileName, fileHandle);
     assert(rc == success);
 
-    int numRecords = 2000;
+    int numRecords = 5000;
     void *record = malloc(1000);
     void *returnedData = malloc(1000);
 
@@ -788,8 +788,8 @@ int RBFTest_10(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &siz
     rc = rbfm->closeFile(fileHandle);
     assert(rc == success);
 
-//    rc = rbfm->destroyFile(fileName.c_str());
-    rc = rbfm->destroyFile(fileName);
+    rc = rbfm->destroyFile(fileName.c_str());
+//    rc = rbfm->destroyFile(fileName);
     assert(rc == success);
 
     if(!FileExists(fileName.c_str())) {
