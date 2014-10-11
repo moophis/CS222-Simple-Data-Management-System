@@ -5,4 +5,4 @@ CODEROOT = "/home/liqiangw/workspace/cs222/src/"
 CC = g++
 
 #CPPFLAGS = -Wall -I$(CODEROOT) -O3  # maximal optimization
-CPPFLAGS = -Wall -I$(CODEROOT) -g     # with debugging info
+CPPFLAGS = -std=c++11 -Wall -I$(CODEROOT) -g   # with debugging info and C++11 supported

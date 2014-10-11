@@ -2,6 +2,7 @@
 #define _pfm_h_
 
 #include <cstdio>
+//#include <unordered_map>
 
 typedef int RC;
 typedef unsigned PageNum;
@@ -43,21 +44,25 @@ public:
     void setNumberOfPages(unsigned pages);                              // Set the number of pages in the file
     FILE *getFilePointer();                                             // Get the file pointer associated with the file
     void setFilePointer(FILE *ptr);                                     // Set the file pointer associated with the file
+    char *getFileName();                                                // Get the file name
+    void setFileName(const char *name);                                 // Set the file name
 
 private:
     FILE *filePtr;                                            // Associated file pointer
-    unsigned pageCount;                                          // Number of pages in the file
+    unsigned pageCount;                                       // Number of pages in the file
+    char *fileName;                                           // File name
 };
 
 // Enum: status code
 enum {
     SUCCESSFUL    =  0,         // successful operation
-    ERR_EXIST     = -2,         // error: file already exists
-    ERR_NOT_EXIST = -1,         // error: file does not exist
+    ERR_EXIST     = -2,         // error: file (or entry) already exists
+    ERR_NOT_EXIST = -1,         // error: file (or entry) does not exist
     ERR_LOCATE    = -3,         // error: cannot navigate certain position of the file
     ERR_WRITE     = -4,         // error: cannot write data into the file
     ERR_READ      = -5,         // error: cannot read data from the file
     ERR_NULLPTR   = -6,         // error: null pointer error
+    ERR_ALIGN     = -7,         // error: file size is not a multiple of PAGE_SIZE
 };
 
 #endif

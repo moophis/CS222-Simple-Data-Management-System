@@ -2,6 +2,8 @@
 #include <iostream>
 #include <cstdio>
 
+/////////////////////////////////////////////////////
+
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
 PagedFileManager* PagedFileManager::instance()
@@ -36,7 +38,11 @@ RC PagedFileManager::createFile(const char *fileName)
     if (fp) {
         return ERR_EXIST;
     } else {
-        return fopen(fileName, "w") ? SUCCESSFUL : ERR_NOT_EXIST;
+        fp = fopen(fileName, "w");
+        if (!fp) {
+            return ERR_NOT_EXIST;
+        }
+        return SUCCESSFUL;
     }
 }
 
@@ -72,7 +78,25 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
         return ERR_NOT_EXIST;
     }
 
+    // get the file size in pages(should be multiple of PAGE_SIZE)
+    long fileSize = 0l;
+    if (fseek(fp, 0, SEEK_END)) {
+        return ERR_LOCATE;
+    }
+    if ((fileSize = ftell(fp)) == -1) {
+        return ERR_LOCATE;
+    }
+    if (fileSize % PAGE_SIZE != 0) {
+        // File size is not a multiple of PAGE_SIZE
+        // Probably this file has been damaged
+        return ERR_ALIGN;
+    }
+
+    fileHandle.setNumberOfPages(fileSize / PAGE_SIZE);
     fileHandle.setFilePointer(fp);
+    fileHandle.setFileName(fileName);
+    std::cout << "### In PagedFileManager::openFile(), set fileHandle: -> name: " << fileHandle.getFileName()
+         << ", # of pages: " << fileHandle.getNumberOfPages() << std::endl;
 
     return SUCCESSFUL;
 }
@@ -93,10 +117,13 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 }
 
 
+/////////////////////////////////////////////////////
+
 FileHandle::FileHandle()
 {
     pageCount = 0;
     filePtr   = NULL;
+    fileName  = NULL;
 }
 
 
@@ -116,6 +143,9 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 {
     if (!data) {
         return ERR_NULLPTR;
+    }
+    if (pageNum >= pageCount) {
+        return ERR_LOCATE;
     }
 
     long curPos = pageNum * PAGE_SIZE;
@@ -142,6 +172,10 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
  */
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
+    if (pageNum > pageCount || pageNum < 0) {
+        return ERR_LOCATE;
+    }
+
     long curPos = pageNum * PAGE_SIZE;
 
     if (fseek(filePtr, curPos, SEEK_SET)) {
@@ -215,3 +249,20 @@ void FileHandle::setFilePointer(FILE *ptr)
     filePtr = ptr;
 }
 
+/**
+ * Get the file name.
+ *
+ * @return file name
+ */
+char *FileHandle::getFileName() {
+    return fileName;
+}
+
+/**
+ * Set the file name.
+ *
+ * @param file name
+ */
+void FileHandle::setFileName(const char *name) {
+    fileName = (char *)name;
+}

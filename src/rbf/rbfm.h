@@ -3,6 +3,10 @@
 
 #include <string>
 #include <vector>
+#include <map>
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "../rbf/pfm.h"
 
@@ -38,7 +42,11 @@ typedef enum { EQ_OP = 0,  // =
            NO_OP       // no condition
 } CompOp;
 
-
+// enum status code
+enum {
+    ERR_UNKNOWN_TYPE  = -100,   // error: unknown attribute type
+    ERR_FORMAT        = -101,   // error: wrong record format
+};
 
 /****************************************************************************
 The scan iterator is NOT required to be implemented for part 1 of the project
@@ -92,6 +100,8 @@ public:
   // This method will be mainly used for debugging/testing
   RC printRecord(const vector<Attribute> &recordDescriptor, const void *data);
 
+  RC countRecordSize(const vector<Attribute> &recordDescriptor, const void *data, unsigned &size);
+
 /**************************************************************************************************************************************************************
 ***************************************************************************************************************************************************************
 IMPORTANT, PLEASE READ: All methods below this comment (other than the constructor and destructor) are NOT required to be implemented for part 1 of the project
@@ -130,6 +140,65 @@ protected:
 
 private:
   static RecordBasedFileManager *_rbf_manager;
+
+  static PagedFileManager *_pfm_manager;
+};
+
+// Manager free space for each page of a database file
+enum {
+  ERR_BAD_HANDLE        = -201,  // error: FileHand is bad
+  ERR_BAD_DATA          = -202,  // error: bad data
+  ERR_SIZE_TOO_LARGE    = -203,  // error: request too large data
+  ERR_RECORD_NOT_FOUND  = -204,  // error: cannot find the record
+};
+
+class SpaceManager {
+public:
+  typedef map<int, set<int> > FreeSpaceMap;    // <free space size, corresponding locations (page #)>
+
+  static SpaceManager *instance();
+  static void *getPageBuffer();
+  RC bufferSizeInfo(const string &fileName, FileHandle &fileHandle);
+  RC clearSizeInfo(const string &fileName, FileHandle &fileHandle); // TODO
+  RC allocateSpace(const string &fileName, FileHandle &fileHandle, int spaceSize, int &pageNum);
+  RC deallocateSpace(const string &fileName, FileHandle &fileHandle, int pageNum, int startPosition); /// TODO
+  void printFreeSpaceMap();   // Print out the map for debugging purposes
+  void updateFreeSpaceMap(const string &fileName, int pageNum, int size);
+  void clearFreeSpaceMap(const string &fileName);
+
+  // TODO: for bufferSizeInfo(), readRecord()
+  unsigned short getFreePtr(void *page);
+  unsigned short getSlotCount(void *page);
+  short getSlotStartPos(void *page, int slotNum);
+  unsigned short getSlotLength(void *page, int slotNum);
+  void setFreePtr(void *page, unsigned short data);
+  void setSlotCount(void *page, unsigned short data);
+  void setSlotStartPos(void *page, int slotNum, short data);
+  void setSlotLength(void *page, int slotNum, unsigned short data);
+  void setSlot(void *page, int slotNum, short start, unsigned short length);
+  void writeRecord(void *page, const void *data, unsigned short start, unsigned size);
+  void readRecord(const void *page, void *data, unsigned short start, unsigned size);
+
+  int getMetadataSize(int slotNum);
+  // Find whether there are still allocated slots yet used. If so, return the first slot #
+  bool hasFreeExistingSlot(void *page, unsigned short slotNum, unsigned short &firstFreeSlot);
+  void initCleanPage(void *page);
+
+private:
+  // Variable sizes within metadata (in byte)
+  enum {
+    FREE_PTR_LEN   = 2,
+    SLOT_NUM_LEN   = 2,
+    SLOT_START_LEN = 2,
+    SLOT_LEN_LEN   = 2,
+  };
+  static unordered_map<string, FreeSpaceMap> __freeSpace;       // <file name, free space map>
+  static SpaceManager *_sp_manager;   // SpaceManager instance
+  static void *__buffer;              // the page buffer used to store a page temporarily
+
+protected:
+  SpaceManager();
+  ~SpaceManager();
 };
 
 #endif
