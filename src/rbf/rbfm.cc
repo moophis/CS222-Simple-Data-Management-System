@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <map>
 #include <set>
-#include <unordered_map>
-#include <unordered_set>
+//#include <unordered_map>
+//#include <unordered_set>
 
 #include "rbfm.h"
 
@@ -356,7 +356,7 @@ RC RecordBasedFileManager::countRecordSize(const vector<Attribute> &recordDescri
  */
 typedef map<int, set<int> > FreeSpaceMap;    // <free space size, corresponding locations (page #)>
 
-std::unordered_map<string, FreeSpaceMap> SpaceManager::__freeSpace;
+map<string, FreeSpaceMap> SpaceManager::__freeSpace;
 
 SpaceManager* SpaceManager::_sp_manager = 0;
 
@@ -489,13 +489,13 @@ RC SpaceManager::allocateSpace(const string &fileName, FileHandle &fileHandle, i
      */
     int page = -1;
     FreeSpaceMap &fsm = __freeSpace[(string &)fileName];
-    for (auto it = fsm.begin(); it != fsm.end(); ++it) {
+    for (map<int, set<int> >::iterator it = fsm.begin(); it != fsm.end(); ++it) {
         __trace();
         int curSize = it->first;
         if (curSize >= spaceSize) {
             // find the satisfied free space with minimum size
             set<int> &pageSet = it->second;
-            for (auto jt = pageSet.begin(); jt != pageSet.end(); ++jt) {
+            for (set<int>::iterator jt = pageSet.begin(); jt != pageSet.end(); ++jt) {
                 page = *jt;
                 pageSet.erase(jt);
                 break;
@@ -542,7 +542,7 @@ RC SpaceManager::deallocateSpace(const string &fileName, FileHandle &fileHandle,
  */
 void SpaceManager::updateFreeSpaceMap(const string &fileName, int pageNum, int size) {
     if (size > 0) {
-        __freeSpace[(string &)fileName][size].emplace(pageNum);
+        __freeSpace[(string &)fileName][size].insert(pageNum);
     }
 }
 
@@ -559,13 +559,13 @@ void SpaceManager::clearFreeSpaceMap(const string &fileName) {
 void SpaceManager::printFreeSpaceMap() {
     __trace();
     std::cout << "### Free Space Map ###" << std::endl;
-    for (auto it = __freeSpace.begin(); it != __freeSpace.end(); ++it) {
+    for (map<string, FreeSpaceMap>::iterator it = __freeSpace.begin(); it != __freeSpace.end(); ++it) {
         std::cout << "File Name: " << it->first << std::endl;
         FreeSpaceMap fsm = it->second;
-        for (auto jt = fsm.begin(); jt != fsm.end(); ++jt) {
+        for (map<int, set<int> >::iterator jt = fsm.begin(); jt != fsm.end(); ++jt) {
             std::cout << "\tFree Size: " << jt->first << std::endl;
             set<int> pageSet = jt->second;
-            for (auto kt = pageSet.begin(); kt != pageSet.end(); ++kt) {
+            for (set<int>::iterator kt = pageSet.begin(); kt != pageSet.end(); ++kt) {
                 std::cout << "\t\tPage " << *kt << std::endl;
             }
         }

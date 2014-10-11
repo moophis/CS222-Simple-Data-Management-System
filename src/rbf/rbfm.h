@@ -5,8 +5,8 @@
 #include <vector>
 #include <map>
 #include <set>
-#include <unordered_map>
-#include <unordered_set>
+//#include <unordered_map>
+//#include <unordered_set>
 
 #include "../rbf/pfm.h"
 
@@ -192,7 +192,7 @@ private:
     SLOT_START_LEN = 2,
     SLOT_LEN_LEN   = 2,
   };
-  static unordered_map<string, FreeSpaceMap> __freeSpace;       // <file name, free space map>
+  static map<string, FreeSpaceMap> __freeSpace;       // <file name, free space map>
   static SpaceManager *_sp_manager;   // SpaceManager instance
   static void *__buffer;              // the page buffer used to store a page temporarily
 
