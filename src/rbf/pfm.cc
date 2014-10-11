@@ -58,6 +58,7 @@ RC PagedFileManager::destroyFile(const char *fileName)
     if (remove(fileName) != 0) {
         return ERR_NOT_EXIST;
     } else {
+        __trace();
         return SUCCESSFUL;
     }
 }
@@ -95,8 +96,8 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
     fileHandle.setNumberOfPages(fileSize / PAGE_SIZE);
     fileHandle.setFilePointer(fp);
     fileHandle.setFileName(fileName);
-    std::cout << "### In PagedFileManager::openFile(), set fileHandle: -> name: " << fileHandle.getFileName()
-         << ", # of pages: " << fileHandle.getNumberOfPages() << std::endl;
+//    std::cout << "### In PagedFileManager::openFile(), set fileHandle: -> name: " << fileHandle.getFileName()
+//         << ", # of pages: " << fileHandle.getNumberOfPages() << std::endl;
 
     return SUCCESSFUL;
 }

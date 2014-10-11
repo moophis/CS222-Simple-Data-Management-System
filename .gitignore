@@ -28,7 +28,5 @@
 *.app
 
 # Debug folder
-Debug/*.*
+Debug/
 
-# Test Files
-*test*

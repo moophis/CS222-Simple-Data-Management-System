@@ -62,8 +62,17 @@ RC RecordBasedFileManager::destroyFile(const string &fileName) {
  * @return status
  */
 RC RecordBasedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
-    SpaceManager::instance()->bufferSizeInfo(fileName, fileHandle);
-    return _pfm_manager->openFile(fileName.c_str(), fileHandle);
+    __trace();
+    RC err;
+    // Note that _pfm_manager->openFile() will initialize fileHandle
+    if ((err = _pfm_manager->openFile(fileName.c_str(), fileHandle)) != SUCCESSFUL) {
+        return err;
+    }
+    if ((err = SpaceManager::instance()->bufferSizeInfo(fileName, fileHandle)) != SUCCESSFUL) {
+        return err;
+    }
+    __trace();
+    return SUCCESSFUL;
 }
 
 /**
@@ -93,28 +102,31 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle) {
  * @param status
  */
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid) {
-    cout << "In insertRecord(): " << endl;
     if (!fileHandle.getFilePointer() ||
          fileHandle.getNumberOfPages() < 0 ||
          fileHandle.getFileName() == NULL) {
         return ERR_BAD_HANDLE;
     }
-    cout << "  --> fileName: " << fileHandle.getFileName() << endl;
 
     RC err = 0;
     string fileName(fileHandle.getFileName());
 
     // calculate the size of the record
+    __trace();
     unsigned recordSize;
     if ((err = countRecordSize(recordDescriptor, data, recordSize)) != SUCCESSFUL) {
+        __trace();
         return err;
     }
+    __trace();
+
     // find and allocate a fit space to store the record: get page # and start position
     // if cannot find an existing page then append and initialize a new page
     int pageNum = -1;
     if ((err = SpaceManager::instance()->allocateSpace(fileName, fileHandle, recordSize, pageNum)) != SUCCESSFUL) {
         return err;
     }
+    __trace();
 
     void *page = SpaceManager::getPageBuffer();
     if (pageNum == -1) {
@@ -125,48 +137,66 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
         SpaceManager::instance()->setFreePtr(page, recordSize);           // update free pointer
         SpaceManager::instance()->setSlotCount(page, 1);                 // update # of slots
         SpaceManager::instance()->setSlot(page, 0, 0, recordSize);        // set start position of first slot
+
         // append that page
         if ((err = fileHandle.appendPage(page)) != SUCCESSFUL) {
             return err;
         }
-        // update metadata
-        int freeSize = PAGE_SIZE - recordSize - SpaceManager::instance()->getMetadataSize(1);
+
+        // update metadata, we need reserve one more slot since we don't have free existing ones
+        int freeSize = PAGE_SIZE - recordSize - SpaceManager::instance()->getMetadataSize(2);  // existing + reserved one
         SpaceManager::instance()->updateFreeSpaceMap(fileName, pageNum, freeSize);
+
         // update RID
         rid.pageNum = (unsigned) pageNum;
         rid.slotNum = 0;
     } else {
-        // read that page: hasFreeExistingSlot()
+        // use existing page, read that page
         if ((err = fileHandle.readPage(pageNum, page)) != SUCCESSFUL) {
             return err;
         }
+
         // find place and insert record
         unsigned short start = SpaceManager::instance()->getFreePtr(page);
         SpaceManager::instance()->writeRecord(page, data, start, recordSize);
+
         // update metadata (in disk file and the map in memory)
-        unsigned short slotNum = SpaceManager::instance()->getSlotCount(page);
+        unsigned short slotCount = SpaceManager::instance()->getSlotCount(page);
         unsigned short firstFreeSlot;
-        if (!SpaceManager::instance()->hasFreeExistingSlot(page, slotNum, firstFreeSlot)) {
+
+        // check whether we can reused previously released slot
+        int reservedSlotSpace = 0;
+        if (!SpaceManager::instance()->hasFreeExistingSlot(page, slotCount, firstFreeSlot)) {
             // insert a new slot
-            firstFreeSlot = slotNum;
-            SpaceManager::instance()->setSlot(page, slotNum, start, recordSize);
-            SpaceManager::instance()->setSlotCount(page, ++slotNum);
+            firstFreeSlot = slotCount;
+            SpaceManager::instance()->setSlot(page, slotCount, start, recordSize);
+            SpaceManager::instance()->setSlotCount(page, ++slotCount);
+            // since we don't have free existing free slot, we need to reserve one for next insertion
+            reservedSlotSpace = 1;
         } else {
             SpaceManager::instance()->setSlot(page, firstFreeSlot, start, recordSize);
         }
+
+        // update free pointer
         SpaceManager::instance()->setFreePtr(page, start + recordSize);
+
         // write back the page
         if ((err = fileHandle.writePage(pageNum, page)) != SUCCESSFUL) {
             return err;
         }
+
         // update metadata
-        int freeSize = PAGE_SIZE - start - recordSize - SpaceManager::instance()->getMetadataSize(slotNum);
+        int freeSize = PAGE_SIZE - start - recordSize
+                        - SpaceManager::instance()->getMetadataSize(slotCount + reservedSlotSpace);
         SpaceManager::instance()->updateFreeSpaceMap(fileName, pageNum, freeSize);
+
         // Update RID
         rid.pageNum = (unsigned) pageNum;
         rid.slotNum = firstFreeSlot;
     }
 
+    __trace();
+//    SpaceManager::instance()->printFreeSpaceMap();
     return SUCCESSFUL;
 }
 
@@ -181,6 +211,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
  * @return status
  */
 RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data) {
+//    cout << "RID: page # " << rid.pageNum << ", slot # " << rid.slotNum << endl;
     if (!fileHandle.getFilePointer() ||
          fileHandle.getNumberOfPages() < 0 ||
          fileHandle.getFileName() == NULL) {
@@ -243,19 +274,36 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
             // read the string
             void *buffer = malloc(len + 1);
             memcpy((char *)buffer, (char *)data + offset, len);
-            strncat((char *)buffer, "", 1);
-            std::cout << name << "(string): " << ((char *) buffer) << std::endl;
+            std::cout << name << "(string = " << len << "): ";
+            for (unsigned j = 0; j < len; j++) {
+                std::cout << *((char *) buffer + j);
+            }
+            std::cout << " --> (origin): ";
+            for (unsigned j = 0; j < len; j++) {
+                std::cout << std::hex << (int)*((char *) buffer + j) << " ";
+            }
+            std::cout << std::dec << std::endl;
             free(buffer);
             offset += len;
         } else if (type == TypeInt) {
             int num;
             memcpy((char *)&num, (char *)data + offset, sizeof(int));
-            std::cout << name << "(int): " << num << std::endl;
+            std::cout << name << "(int): " << num;
+            std::cout << " --> (origin): ";
+            for (unsigned j = 0; j < sizeof(int); j++) {
+                std::cout << std::hex << (int)*((char *)&num + j) << " ";
+            }
+            std::cout << std::dec << std::endl;
             offset += sizeof(int);
         } else if (type == TypeReal) {
             float real;
             memcpy((char *)&real, (char *)data + offset, sizeof(float));
-            std::cout << name << "(real): " << real << std::endl;
+            std::cout << name << "(real): " << real;
+            std::cout << " --> (origin): ";
+            for (unsigned j = 0; j < sizeof(int); j++) {
+                std::cout << std::hex << (int)*((char *)&real + j) << " ";
+            }
+            std::cout << std::dec << std::endl;
             offset += sizeof(float);
         } else {
             return ERR_UNKNOWN_TYPE;
@@ -351,23 +399,19 @@ void *SpaceManager::getPageBuffer() {
  * @return status
  */
 RC SpaceManager::bufferSizeInfo(const string &fileName, FileHandle &fileHandle) {
-    if (!fileHandle.getFilePointer() ||
-         fileHandle.getNumberOfPages() < 0 ||
-         strcmp(fileName.c_str(), fileHandle.getFileName()) != 0) {
-        return ERR_BAD_HANDLE;
-    }
-
     clearFreeSpaceMap(fileName);
 
     RC err = 0;
     int pageNum = fileHandle.getNumberOfPages();
     for (int i = 0; i < pageNum; i++) {
+//        cout << "Searching page " << i << endl;
         void *buffer = getPageBuffer();
         if (!buffer) {
             return ERR_NULLPTR;
         }
 
         if ((err = fileHandle.readPage(i, buffer)) != SUCCESSFUL) {
+            __trace();
             return err;
         }
 
@@ -378,23 +422,32 @@ RC SpaceManager::bufferSizeInfo(const string &fileName, FileHandle &fileHandle) 
          * reflect in the calculation of free space.
          */
         unsigned short freePtr = getFreePtr(buffer);
-        unsigned short slotNum = getSlotCount(buffer);
+        unsigned short slotCount = getSlotCount(buffer);
         if (freePtr >= PAGE_SIZE - 4) {
+            __trace();
             return ERR_BAD_DATA;
         }
-        if (slotNum > PAGE_SIZE / 4) {
+        if (slotCount > PAGE_SIZE / 4) {
+            __trace();
             return ERR_BAD_DATA;
         }
+
+//        cout << "Free ptr: " << freePtr << ", slotCount: " << slotCount << endl;
 
         unsigned short firstSlot;
-        if (!hasFreeExistingSlot(buffer, slotNum, firstSlot)) {
-            slotNum++;
+        if (!hasFreeExistingSlot(buffer, slotCount, firstSlot)) {
+            slotCount++;
+        } else {
+            __trace();
         }
 
-        int freeSize = PAGE_SIZE - freePtr - getMetadataSize(slotNum);
+        int freeSize = PAGE_SIZE - freePtr - getMetadataSize(slotCount);
+//        cout << "freeSize " << freeSize << endl;
         updateFreeSpaceMap(fileName, i, freeSize);
     }
 
+//    printFreeSpaceMap();
+    __trace();
     return SUCCESSFUL;
 }
 
@@ -412,14 +465,22 @@ RC SpaceManager::bufferSizeInfo(const string &fileName, FileHandle &fileHandle) 
  * @return status
  */
 RC SpaceManager::allocateSpace(const string &fileName, FileHandle &fileHandle, int spaceSize, int &pageNum) {
-    if (__freeSpace.count((string &)fileName) == 0) {
-        return ERR_NOT_EXIST;
+//    cout << "In SpaceManager::allocateSpace, fileName: " << fileName << " space request: " << spaceSize << endl;
+    __trace();
+    if (!fileHandle.getFilePointer() ||
+         fileHandle.getNumberOfPages() < 0 ||
+         strcmp(fileName.c_str(), fileHandle.getFileName()) != 0) {
+        __trace();
+        return ERR_BAD_HANDLE;
     }
+    __trace();
+
     if (spaceSize >= PAGE_SIZE - FREE_PTR_LEN - SLOT_NUM_LEN - SLOT_START_LEN - SLOT_LEN_LEN) {
         // 8 = # of entries (2 byte) + free chuck header pointer (2 byte)
         // + information for the first slot (4 byte)
         return ERR_SIZE_TOO_LARGE;
     }
+    __trace();
 
     /*
      * Retrieve suitable free page according to metadata
@@ -429,6 +490,7 @@ RC SpaceManager::allocateSpace(const string &fileName, FileHandle &fileHandle, i
     int page = -1;
     FreeSpaceMap &fsm = __freeSpace[(string &)fileName];
     for (auto it = fsm.begin(); it != fsm.end(); ++it) {
+        __trace();
         int curSize = it->first;
         if (curSize >= spaceSize) {
             // find the satisfied free space with minimum size
@@ -446,6 +508,7 @@ RC SpaceManager::allocateSpace(const string &fileName, FileHandle &fileHandle, i
     }
 
     pageNum = page;
+    __trace();
     return SUCCESSFUL;
 }
 
@@ -478,7 +541,9 @@ RC SpaceManager::deallocateSpace(const string &fileName, FileHandle &fileHandle,
  *          the size of the free space
  */
 void SpaceManager::updateFreeSpaceMap(const string &fileName, int pageNum, int size) {
-    __freeSpace[(string &)fileName][size].emplace(pageNum);
+    if (size > 0) {
+        __freeSpace[(string &)fileName][size].emplace(pageNum);
+    }
 }
 
 /**
@@ -492,6 +557,7 @@ void SpaceManager::clearFreeSpaceMap(const string &fileName) {
  * Print the free space map for debugging purposes.
  */
 void SpaceManager::printFreeSpaceMap() {
+    __trace();
     std::cout << "### Free Space Map ###" << std::endl;
     for (auto it = __freeSpace.begin(); it != __freeSpace.end(); ++it) {
         std::cout << "File Name: " << it->first << std::endl;
