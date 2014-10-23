@@ -159,29 +159,32 @@ public:
   static SpaceManager *instance();
   static void *getPageBuffer();
   RC bufferSizeInfo(const string &fileName, FileHandle &fileHandle);
-  RC clearSizeInfo(const string &fileName, FileHandle &fileHandle); // TODO
   RC allocateSpace(const string &fileName, FileHandle &fileHandle, int spaceSize, int &pageNum);
-  RC deallocateSpace(const string &fileName, FileHandle &fileHandle, int pageNum, int startPosition); /// TODO
+  RC deallocateSpace(const string &fileName, FileHandle &fileHandle, int pageNum, int slotNum);
+  RC deallocateAllSpaces(const string &fileName, FileHandle &fileHandle);
   void printFreeSpaceMap();   // Print out the map for debugging purposes
   void updateFreeSpaceMap(const string &fileName, int pageNum, int size);
   void clearFreeSpaceMap(const string &fileName);
 
-  // TODO: for bufferSizeInfo(), readRecord()
   unsigned short getFreePtr(void *page);
   unsigned short getSlotCount(void *page);
   short getSlotStartPos(void *page, int slotNum);
-  unsigned short getSlotLength(void *page, int slotNum);
+  short getSlotLength(void *page, int slotNum);
   void setFreePtr(void *page, unsigned short data);
   void setSlotCount(void *page, unsigned short data);
   void setSlotStartPos(void *page, int slotNum, short data);
-  void setSlotLength(void *page, int slotNum, unsigned short data);
-  void setSlot(void *page, int slotNum, short start, unsigned short length);
+  void setSlotLength(void *page, int slotNum, short data);
+  void setSlot(void *page, int slotNum, short start, short length);
   void writeRecord(void *page, const void *data, unsigned short start, unsigned size);
   void readRecord(const void *page, void *data, unsigned short start, unsigned size);
 
   int getMetadataSize(int slotNum);
   // Find whether there are still allocated slots yet used. If so, return the first slot #
-  bool hasFreeExistingSlot(void *page, unsigned short slotNum, unsigned short &firstFreeSlot);
+  bool hasFreeExistingSlot(void *page, unsigned short slotCount, unsigned short &firstFreeSlot);
+  bool isTombstoneSlot(short startPos, short size); // Find whether the slot directory is tomb-stoned
+  void setTombstoneSlot(void *page, int slotNum, short newPageNum, short newSlotNum); // Set a slot as a tomb stone
+  void getNewRecordPos(short startPos, short length, int &newPageNum, int &newSlotNum); // Get new position from tomb stone
+  void nullifySlot(void *page, int slotNum);  // Set the slot directory null (record deletion)
   void initCleanPage(void *page);
 
 private:

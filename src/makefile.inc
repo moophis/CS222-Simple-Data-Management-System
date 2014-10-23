@@ -1,5 +1,5 @@
 ## For students: change this path to the root of your code
-CODEROOT = "/home/liqiangw/workspace/cs222/src/"
+CODEROOT = ".."
 
 #CC = gcc
 CC = g++

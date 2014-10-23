@@ -82,9 +82,11 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
     // get the file size in pages(should be multiple of PAGE_SIZE)
     long fileSize = 0l;
     if (fseek(fp, 0, SEEK_END)) {
+        __trace();
         return ERR_LOCATE;
     }
     if ((fileSize = ftell(fp)) == -1) {
+        __trace();
         return ERR_LOCATE;
     }
     if (fileSize % PAGE_SIZE != 0) {
@@ -145,13 +147,16 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
     if (!data) {
         return ERR_NULLPTR;
     }
-    if (pageNum >= pageCount) {
+    if ((int) pageNum >= pageCount) {
+        std::cout << "pageNum: " << pageNum << ", pageCount: " << pageCount << std::endl;
+        __trace();
         return ERR_LOCATE;
     }
 
     long curPos = pageNum * PAGE_SIZE;
 
     if (fseek(filePtr, curPos, SEEK_SET)) {
+        __trace();
         return ERR_LOCATE;
     }
 
@@ -174,12 +179,14 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
     if (pageNum > pageCount || pageNum < 0) {
+        __trace();
         return ERR_LOCATE;
     }
 
     long curPos = pageNum * PAGE_SIZE;
 
     if (fseek(filePtr, curPos, SEEK_SET)) {
+        __trace();
         return ERR_LOCATE;
     }
 
