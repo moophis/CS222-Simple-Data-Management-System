@@ -46,6 +46,7 @@ typedef enum { EQ_OP = 0,  // =
 enum {
     ERR_UNKNOWN_TYPE  = -100,   // error: unknown attribute type
     ERR_FORMAT        = -101,   // error: wrong record format
+    ERR_INV_COND      = -102,   // error: invalid condition
 };
 
 /****************************************************************************
@@ -65,18 +66,43 @@ The scan iterator is NOT required to be implemented for part 1 of the project
 
 
 class RBFM_ScanIterator {
+  friend class RecordBasedFileManager;
+
+  vector<Attribute> recordDescriptor;
+  string conditionAttribute;
+  CompOp compOp;
+  void *value;
+  vector<string> attributeNames;
+  FileHandle fileHandle;
+
+  unsigned nextPageNum;
+  unsigned nextSlotNum;
+  bool active;
+
 public:
-  RBFM_ScanIterator() {};
-  ~RBFM_ScanIterator() {};
+  RBFM_ScanIterator();
+  ~RBFM_ScanIterator();
 
   // "data" follows the same format as RecordBasedFileManager::insertRecord()
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
-  RC close() { return -1; };
+  RC getNextRecord(RID &rid, void *data);
+  RC close();
+
+private:
+  // Find if a given record meets the scan criterion
+  bool meetCriterion(void *page, unsigned short startPos, unsigned short length);
+
+  template <class T>
+  bool evaluateNumber(T number, CompOp compOP, T val);
+
+  bool evaluateString(string str, CompOp compOp, string val);
 };
 
 
 class RecordBasedFileManager
 {
+  // RBFM_ScanIterator needs to use __readAttribute()
+  friend class RBFM_ScanIterator;
+
 public:
   static RecordBasedFileManager* instance();
 
@@ -139,6 +165,13 @@ protected:
   ~RecordBasedFileManager();
 
 private:
+  // Helper function for insertRecord
+  RC __insertRecord(const string &fileName, FileHandle &fileHandle,
+        const void *data, RID &rid, unsigned recordSize);
+  // Helper function for readAttribute
+  RC __readAttribute(void *page, unsigned short startPos, const vector<Attribute> &recordDescriptor,
+              const string attributeName, void *data, unsigned &dataSize);
+
   static RecordBasedFileManager *_rbf_manager;
 
   static PagedFileManager *_pfm_manager;
@@ -146,10 +179,12 @@ private:
 
 // Manager free space for each page of a database file
 enum {
-  ERR_BAD_HANDLE        = -201,  // error: FileHand is bad
-  ERR_BAD_DATA          = -202,  // error: bad data
-  ERR_SIZE_TOO_LARGE    = -203,  // error: request too large data
-  ERR_RECORD_NOT_FOUND  = -204,  // error: cannot find the record
+  ERR_BAD_HANDLE            = -201,  // error: FileHand is bad
+  ERR_BAD_DATA              = -202,  // error: bad data
+  ERR_SIZE_TOO_LARGE        = -203,  // error: request too large data
+  ERR_RECORD_NOT_FOUND      = -204,  // error: cannot find the record
+  ERR_MAP_ENTRY_NOT_FOUND   = -205,  // error: cannot find the map entry
+  ERR_ATTR_NOT_FOUND        = -206,  // error: cannot find the attribute
 };
 
 class SpaceManager {
@@ -160,30 +195,33 @@ public:
   static void *getPageBuffer();
   RC bufferSizeInfo(const string &fileName, FileHandle &fileHandle);
   RC allocateSpace(const string &fileName, FileHandle &fileHandle, int spaceSize, int &pageNum);
-  RC deallocateSpace(const string &fileName, FileHandle &fileHandle, int pageNum, int slotNum);
+  RC deallocateSpace(const string &fileName, FileHandle &fileHandle, unsigned pageNum, unsigned slotNum);
   RC deallocateAllSpaces(const string &fileName, FileHandle &fileHandle);
   void printFreeSpaceMap();   // Print out the map for debugging purposes
-  void updateFreeSpaceMap(const string &fileName, int pageNum, int size);
+  void insertFreeSpaceMap(const string &fileName, int pageNum, int size);
+  RC updateFreeSpaceMap(const string &fileName, int pageNum, int oldSize, int newSize);
   void clearFreeSpaceMap(const string &fileName);
 
   unsigned short getFreePtr(void *page);
   unsigned short getSlotCount(void *page);
-  short getSlotStartPos(void *page, int slotNum);
-  short getSlotLength(void *page, int slotNum);
+  short getSlotStartPos(void *page, unsigned slotNum);
+  short getSlotLength(void *page, unsigned slotNum);
   void setFreePtr(void *page, unsigned short data);
   void setSlotCount(void *page, unsigned short data);
-  void setSlotStartPos(void *page, int slotNum, short data);
-  void setSlotLength(void *page, int slotNum, short data);
+  void setSlotStartPos(void *page, unsigned slotNum, short data);
+  void setSlotLength(void *page, unsigned slotNum, short data);
   void setSlot(void *page, int slotNum, short start, short length);
   void writeRecord(void *page, const void *data, unsigned short start, unsigned size);
   void readRecord(const void *page, void *data, unsigned short start, unsigned size);
 
-  int getMetadataSize(int slotNum);
+  unsigned getMetadataSize(int slotCount);
+  unsigned getPageFreeSize(void *page);
   // Find whether there are still allocated slots yet used. If so, return the first slot #
   bool hasFreeExistingSlot(void *page, unsigned short slotCount, unsigned short &firstFreeSlot);
   bool isTombstoneSlot(short startPos, short size); // Find whether the slot directory is tomb-stoned
+  bool isOccupiedSlot(short startPos, short length); // Check whether the slot is normally occupied
   void setTombstoneSlot(void *page, int slotNum, short newPageNum, short newSlotNum); // Set a slot as a tomb stone
-  void getNewRecordPos(short startPos, short length, int &newPageNum, int &newSlotNum); // Get new position from tomb stone
+  void getNewRecordPos(short startPos, short length, unsigned &newPageNum, unsigned &newSlotNum); // Get new position from tomb stone
   void nullifySlot(void *page, int slotNum);  // Set the slot directory null (record deletion)
   void initCleanPage(void *page);
 

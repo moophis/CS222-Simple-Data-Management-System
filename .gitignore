@@ -30,3 +30,6 @@
 # Debug folder
 Debug/
 
+# Project Files
+.cproject
+.project
