@@ -11,7 +11,7 @@ void TEST_RM_11(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     RC rc = 0;
     void *tuple = malloc(1000);
     void *returnedData = malloc(1000);
-
+    
     readRIDsFromDisk(rids, numTuples);
     readSizesFromDisk(sizes, numTuples);
 
@@ -23,11 +23,7 @@ void TEST_RM_11(const string &tableName, vector<RID> &rids, vector<int> &sizes)
         RID rid = rids[i];
 
         prepareLargeTuple(i+10, tuple, &size);
-        cout << "++ i = " << i << " oldsize = " << sizes[i] << " newsize = " << size << endl;
         rc = rm->updateTuple(tableName, tuple, rid);
-        if (rc != success) {
-            cout << "++ updateTuple() failed at i = " << i << endl;
-        }
         assert(rc == success);
 
         sizes[i] = size;

@@ -10,16 +10,13 @@ void TEST_RM_12(const string &tableName, vector<RID> &rids)
     int numTuples = 2000;
     RC rc = 0;
     void * returnedData = malloc(1000);
-
+    
     readRIDsFromDisk(rids, numTuples);
 
     // Delete the first 1000 tuples
     for(int i = 0; i < 1000; i++)
     {
         rc = rm->deleteTuple(tableName, rids[i]);
-        if (rc != success) {
-            cout << "++deleteTuple() failed at i = " << i << endl;
-        }
         assert(rc == success);
 
         rc = rm->readTuple(tableName, rids[i], returnedData);

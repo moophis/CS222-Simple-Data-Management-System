@@ -56,9 +56,10 @@ RC PagedFileManager::createFile(const char *fileName)
 RC PagedFileManager::destroyFile(const char *fileName)
 {
     if (remove(fileName) != 0) {
+        __trace();
         return ERR_NOT_EXIST;
     } else {
-        __trace();
+//        __trace();
         return SUCCESSFUL;
     }
 }
@@ -76,8 +77,8 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 {
     FILE *fp = fopen(fileName, "r+");
     if (!fp) {
-        __trace();
-        std::cout << "-->Cannot open file: " << fileName << std::endl;
+//        __trace();
+//        std::cout << "-->Cannot open file: " << fileName << std::endl;
         return ERR_NOT_EXIST;
     }
 
@@ -212,9 +213,8 @@ RC FileHandle::appendPage(const void *data)
 {
     RC rc = writePage(getNumberOfPages(), data);
     if (rc == SUCCESSFUL) {
-//        pageCount++;
-        __trace();
-        std::cout << "--> appended a new page, pageCount now is " << getNumberOfPages() << std::endl;
+//        __trace();
+//        std::cout << "--> appended a new page, pageCount now is " << getNumberOfPages() << std::endl;
     } else {
         __trace();
         std::cout << "--> Cannot write data in a new page, rc = " << rc

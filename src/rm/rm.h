@@ -104,7 +104,7 @@ private:
   void initCatalogSchema();
 
   // Prepare catalog data for a table
-  void prepareTableRecord(char *data, int tableId, string tableName);
+  void prepareTableRecord(char *data, int tableId, string tableName, string fileName);
   void prepareColumnRecord(char *data, int tableId, AttrType attrType,
                            unsigned columnSize, string attributeName);
   // Wire metadata for a new created table (writing records in .tables and .columns)
@@ -173,13 +173,6 @@ private:
   vector<Attribute> tablesSchema;
   vector<Attribute> columnsSchema;
 
-  // Constants
-//  static const std::string TABLES_NAME;
-//  static const std::string COLUMNS_NAME;
-//  static const std::string TABLE_FILE_SUFFIX;
-//  static const int TABLES_ID;
-//  static const int COLUMNS_ID;
-//  static const int MAX_NAME_LEN;
 };
 
 // error message in rm layer

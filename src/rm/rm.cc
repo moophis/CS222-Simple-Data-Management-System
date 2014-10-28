@@ -2,8 +2,8 @@
 #include "rm.h"
 
 // Constant definitions
-#define TABLES_NAME             ".tables"
-#define COLUMNS_NAME            ".columns"
+#define TABLES_NAME             "Tables"
+#define COLUMNS_NAME            "Columns"
 #define TABLE_FILE_SUFFIX       ".tbl"
 const int TABLES_ID             = 0;
 const int COLUMNS_ID            = 1;
@@ -35,22 +35,14 @@ RelationManager::RelationManager()
     bool newTablesFile = false, newColumnsFile = false;
     err = initCatalogFile(TABLES_NAME, tablesHandle, newTablesFile);
     assert(err == SUCCESSFUL);
-//    cout << "tablesHandle: " << tablesHandle.getFileName()
-//         << " @" << tablesHandle.getFilePointer() << endl;
     err = initCatalogFile(COLUMNS_NAME, columnsHandle, newColumnsFile);
     assert(err == SUCCESSFUL);
-//    cout << "tablesHandle: " << tablesHandle.getFileName()
-//         << " @" << tablesHandle.getFilePointer() << endl;
-//    cout << "columnsHandle: " << columnsHandle.getFileName()
-//         << " @" << columnsHandle.getFilePointer() << endl;
 
-//    __trace();
     // Put file handle info into the handle map
     cacheTableHandle(TABLES_NAME, tablesHandle);
     cacheTableHandle(COLUMNS_NAME, columnsHandle);
-    printTableHandleMap();
+//    printTableHandleMap();
     maxTableId = 1;  // 0 and 1 has been reserved
-//    __trace();
 
     // Wire metadata of those two files in the catalog
     if (newTablesFile || newColumnsFile) {
@@ -60,16 +52,15 @@ RelationManager::RelationManager()
         err = wireTableMetadata(COLUMNS_NAME, COLUMNS_ID, columnsSchema);
         assert(err == SUCCESSFUL);
     }
-    __trace();
-    printCatalogMaps();
+//    printCatalogMaps();
 
     // Scan the ".tables" and ".columns" file to build other maps
     // and find the maxTableId.
     err = bufferMappings();
     assert(err == SUCCESSFUL);
-    __trace();
-    printCatalogMaps();
-    cout << "maxTableId: " << maxTableId << endl;
+//    __trace();
+//    printCatalogMaps();
+//    cout << "maxTableId: " << maxTableId << endl;
 
     yieldAdmin();
 }
@@ -297,14 +288,14 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
-    __trace();
+//    __trace();
     RC err;
 
     // Get file handle
     FileHandle fileHandle;
     if ((err = getTableFileHandle(tableName, fileHandle)) != SUCCESSFUL) {
         __trace();
-        cout << "err = " << err << endl;
+//        cout << "err = " << err << endl;
         return err;
     }
     cacheTableHandle(tableName, fileHandle);
@@ -320,7 +311,7 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
     // Call RBFM layer
     if ((err = _rbfm->readRecord(fileHandle, attrs, rid, data)) != SUCCESSFUL) {
         __trace();
-        cout << "err = " << err << endl;
+//        cout << "err = " << err << endl;
         return err;
     }
 
@@ -359,7 +350,7 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
 RC RelationManager::reorganizePage(const string &tableName, const unsigned pageNumber)
 {
-    __trace();
+//    __trace();
     RC err;
 
     if (!isPrivileged(tableName)) {
@@ -415,12 +406,12 @@ RC RelationManager::scan(const string &tableName,
     // Note that for catalog files we have to provide attribute info a prior!!!
     vector<Attribute> attrs;
     if (tableName.compare(TABLES_NAME) == 0) {
-        __trace();
-        cout << "Scan " << TABLES_NAME << endl;
+//        __trace();
+//        cout << "Scan " << TABLES_NAME << endl;
         attrs = tablesSchema;
     } else if (tableName.compare(COLUMNS_NAME) == 0) {
-        __trace();
-        cout << "Scan " << COLUMNS_NAME << endl;
+//        __trace();
+//        cout << "Scan " << COLUMNS_NAME << endl;
         attrs = columnsSchema;
     } else if ((err = getAttributes(tableName, attrs)) != SUCCESSFUL) {
         __trace();
@@ -601,7 +592,8 @@ RC RelationManager::wireTableMetadata(const string &tableName, const int tableId
     RID rid;
 
     // table metadata in ".tables"
-    prepareTableRecord(bufptr, tableId, tableName);
+    string fileName = tableName + TABLE_FILE_SUFFIX;
+    prepareTableRecord(bufptr, tableId, tableName, fileName);
 //    __trace();
     if ((err = _rbfm->insertRecord(tableHandles[TABLES_NAME], this->tablesSchema, bufptr, rid))) {
         __trace();
@@ -658,13 +650,12 @@ RC RelationManager::dropTableMetadata(const string &tableName) {
     return SUCCESSFUL;
 }
 
-// TODO: read RIDs of records into the buffer
 RC RelationManager::bufferMappings() {
     RC err;
 
     // First scan ".tables"
     RM_ScanIterator rm_ScanIterator;
-    vector<string> tablesAttributes = {"TableID", "TableName"};
+    vector<string> tablesAttributes = {"TableID", "TableName", "FileName"}; // TODO: add new attr
     if ((err = scan(TABLES_NAME, "", NO_OP, NULL,
             tablesAttributes, rm_ScanIterator)) != SUCCESSFUL) {
         __trace();
@@ -685,7 +676,16 @@ RC RelationManager::bufferMappings() {
         offset += sizeof(int);
         char tableName[size+1];
         memcpy(tableName, data + offset, size);
+        offset += size;
         tableName[size] = 0;
+        // read FileName (TODO)
+        int fsize;
+        memcpy((char *)&fsize, data + offset, sizeof(int));
+        offset += sizeof(int);
+        char fileName[fsize+1];
+        memcpy(fileName, data + offset, fsize);
+        offset += fsize;
+        fileName[fsize] = 0;
 
         // Update table mapping
         registerTableMapping(string(tableName), tableId, rid);
@@ -746,6 +746,11 @@ void RelationManager::initCatalogSchema() {
     attr.length = MAX_NAME_LEN;  // maximum table name length
     tablesSchema.push_back(attr);
 
+    attr.name = "FileName";      // TODO: new added
+    attr.type = TypeVarChar;
+    attr.length = MAX_NAME_LEN;  // maximum table name length
+    tablesSchema.push_back(attr);
+
     // .columns
     attr.name = "TableID";
     attr.type = TypeInt;
@@ -768,7 +773,7 @@ void RelationManager::initCatalogSchema() {
     columnsSchema.push_back(attr);
 }
 
-void RelationManager::prepareTableRecord(char *data, int tableId, string tableName) {
+void RelationManager::prepareTableRecord(char *data, int tableId, string tableName, string fileName) {
     unsigned offset = 0;
 
     // TableID
@@ -780,6 +785,14 @@ void RelationManager::prepareTableRecord(char *data, int tableId, string tableNa
     memcpy((char *)data + offset, &size, sizeof(int));
     offset += sizeof(int);
     memcpy((char *)data + offset, tableName.c_str(), size);
+    offset += size;
+
+    // TODO: new added
+    // FileName
+    size = (int) fileName.size();
+    memcpy((char *)data + offset, &size, sizeof(int));
+    offset += sizeof(int);
+    memcpy((char *)data + offset, fileName.c_str(), size);
     offset += size;
 }
 

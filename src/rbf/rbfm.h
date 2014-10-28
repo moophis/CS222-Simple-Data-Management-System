@@ -185,6 +185,7 @@ enum {
   ERR_RECORD_NOT_FOUND      = -204,  // error: cannot find the record
   ERR_MAP_ENTRY_NOT_FOUND   = -205,  // error: cannot find the map entry
   ERR_ATTR_NOT_FOUND        = -206,  // error: cannot find the attribute
+  ERR_INV_FREE_SIZE         = -207,  // error: invalid free size (< 0)
 };
 
 class SpaceManager {

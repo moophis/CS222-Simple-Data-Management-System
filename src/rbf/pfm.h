@@ -10,7 +10,7 @@ typedef unsigned PageNum;
 
 #define PAGE_SIZE 4096
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define __trace() do {std::cout << "In " << __FUNCTION__ << " file: " << __FILE__ << ", line: " << __LINE__ << std::endl; } while (0)
 #else

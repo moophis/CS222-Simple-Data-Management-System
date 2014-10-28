@@ -1,3 +1,3 @@
 #!/bin/sh
 
-rm -rf .tables .columns tbl* sizes_file rids_file
+rm -rf Tables Columns tbl* sizes_file rids_file

@@ -30,6 +30,7 @@
 # Debug folder
 Debug/
 
-# Project Files
+# Other Files
 .cproject
 .project
+.DS_Store

@@ -1,4 +1,4 @@
-    #include "test_util.h"
+#include "test_util.h"
 
 void TEST_RM_8_A(const string &tableName)
 {
@@ -6,7 +6,7 @@ void TEST_RM_8_A(const string &tableName)
     // 1. Simple scan **
     cout << "****In Test Case 8_A****" << endl;
 
-    RID rid;
+    RID rid;    
     int tupleSize = 0;
     int numTuples = 100;
     void *tuple;
@@ -14,7 +14,7 @@ void TEST_RM_8_A(const string &tableName)
 
     RID rids[numTuples];
     vector<char *> tuples;
-    set<int> ages;
+    set<int> ages; 
     RC rc = 0;
     for(int i = 0; i < numTuples; i++)
     {
@@ -42,7 +42,7 @@ void TEST_RM_8_A(const string &tableName)
     assert(rc == success);
 
     cout << "Scanned Data:" << endl;
-
+    
     while(rmsi.getNextTuple(rid, returnedData) != RM_EOF)
     {
         cout << "Age: " << *(int *)returnedData << endl;
@@ -65,7 +65,7 @@ void TEST_RM_8_A(const string &tableName)
     {
         free(tuples[i]);
     }
-    cout << "****Test case 8_A passed****" << endl << endl;
+    cout << "****Test case 8_A passed****" << endl << endl; 
     return;
 }
 
