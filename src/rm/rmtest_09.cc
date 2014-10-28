@@ -7,7 +7,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     // 2. insert tuple
     cout << "****In Test case 9****" << endl;
 
-    RID rid; 
+    RID rid;
     void *tuple = malloc(1000);
     int numTuples = 2000;
 
@@ -15,7 +15,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     vector<Attribute> attrs;
     RC rc = rm->getAttributes(tableName, attrs);
     assert(rc == success);
-	
+
     for(unsigned i = 0; i < attrs.size(); i++)
     {
         cout << "Attribute Name: " << attrs[i].name << endl;
@@ -30,12 +30,16 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
         int size = 0;
         memset(tuple, 0, 1000);
         prepareLargeTuple(i, tuple, &size);
+//        cout << "++ i = " << i << " size = " << size << endl;
 
         rc = rm->insertTuple(tableName, tuple, rid);
+        if (rc != success) {
+            cout << "Failed at i = " << i << endl;
+        }
         assert(rc == success);
 
         rids.push_back(rid);
-        sizes.push_back(size);        
+        sizes.push_back(size);
     }
     cout << "****Test case 9 passed****" << endl << endl;
     free(tuple);

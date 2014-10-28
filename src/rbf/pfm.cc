@@ -76,6 +76,8 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
 {
     FILE *fp = fopen(fileName, "r+");
     if (!fp) {
+        __trace();
+        std::cout << "-->Cannot open file: " << fileName << std::endl;
         return ERR_NOT_EXIST;
     }
 
@@ -95,7 +97,7 @@ RC PagedFileManager::openFile(const char *fileName, FileHandle &fileHandle)
         return ERR_ALIGN;
     }
 
-    fileHandle.setNumberOfPages(fileSize / PAGE_SIZE);
+//    fileHandle.setNumberOfPages(fileSize / PAGE_SIZE);
     fileHandle.setFilePointer(fp);
     fileHandle.setFileName(fileName);
 //    std::cout << "### In PagedFileManager::openFile(), set fileHandle: -> name: " << fileHandle.getFileName()
@@ -124,9 +126,9 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 
 FileHandle::FileHandle()
 {
-    pageCount = 0;
+//    pageCount = 0;
     filePtr   = NULL;
-    fileName  = NULL;
+//    fileName  = NULL;
 }
 
 
@@ -147,9 +149,9 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
     if (!data) {
         return ERR_NULLPTR;
     }
-    if ((int) pageNum >= pageCount) {
-        std::cout << "pageNum: " << pageNum << ", pageCount: " << pageCount << std::endl;
+    if (pageNum >= getNumberOfPages()) {
         __trace();
+        std::cout << "--> pageNum: " << pageNum << ", pageCount: " << getNumberOfPages() << std::endl;
         return ERR_LOCATE;
     }
 
@@ -178,7 +180,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
  */
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
-    if (pageNum > pageCount || pageNum < 0) {
+    if (pageNum > getNumberOfPages() || pageNum < 0) {
         __trace();
         return ERR_LOCATE;
     }
@@ -191,6 +193,7 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
     }
 
     if (fwrite(data, sizeof(char), PAGE_SIZE, filePtr) != PAGE_SIZE) {
+        __trace();
         return ERR_WRITE;
     }
 
@@ -207,9 +210,15 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
  */
 RC FileHandle::appendPage(const void *data)
 {
-    RC rc = writePage(pageCount, data);
+    RC rc = writePage(getNumberOfPages(), data);
     if (rc == SUCCESSFUL) {
-        pageCount++;
+//        pageCount++;
+        __trace();
+        std::cout << "--> appended a new page, pageCount now is " << getNumberOfPages() << std::endl;
+    } else {
+        __trace();
+        std::cout << "--> Cannot write data in a new page, rc = " << rc
+             << " current pageCount " << getNumberOfPages() << std::endl;
     }
 
     return rc;
@@ -222,10 +231,27 @@ RC FileHandle::appendPage(const void *data)
  */
 unsigned FileHandle::getNumberOfPages()
 {
-    return pageCount;
+    // get the file size in pages(should be multiple of PAGE_SIZE)
+    long fileSize = 0l;
+    FILE *fp = getFilePointer();
+    if (fseek(fp, 0, SEEK_END)) {
+        __trace();
+        exit(ERR_LOCATE);
+    }
+    if ((fileSize = ftell(fp)) == -1) {
+        __trace();
+        exit(ERR_LOCATE);
+    }
+    if (fileSize % PAGE_SIZE != 0) {
+        // File size is not a multiple of PAGE_SIZE
+        // Probably this file has been damaged
+        exit(ERR_ALIGN);
+    }
+    return fileSize / PAGE_SIZE;
 }
 
 /**
+ * @Depreciated
  * Set the number of pages.
  *
  * @param pages
@@ -233,7 +259,7 @@ unsigned FileHandle::getNumberOfPages()
  */
 void FileHandle::setNumberOfPages(unsigned pages)
 {
-    pageCount = pages;
+//    pageCount = pages;
 }
 
 /**
@@ -263,7 +289,7 @@ void FileHandle::setFilePointer(FILE *ptr)
  * @return file name
  */
 char *FileHandle::getFileName() {
-    return fileName;
+    return (char *) fileName.c_str();
 }
 
 /**
@@ -272,5 +298,5 @@ char *FileHandle::getFileName() {
  * @param file name
  */
 void FileHandle::setFileName(const char *name) {
-    fileName = (char *)name;
+    fileName = std::string((char *)name);
 }

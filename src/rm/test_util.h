@@ -31,21 +31,21 @@ void memProfile()
 void prepareTuple(const int nameLength, const string &name, const int age, const float height, const int salary, void *buffer, int *tupleSize)
 {
     int offset = 0;
-    
+
     memcpy((char *)buffer + offset, &nameLength, sizeof(int));
-    offset += sizeof(int);    
+    offset += sizeof(int);
     memcpy((char *)buffer + offset, name.c_str(), nameLength);
     offset += nameLength;
-    
+
     memcpy((char *)buffer + offset, &age, sizeof(int));
     offset += sizeof(int);
-    
+
     memcpy((char *)buffer + offset, &height, sizeof(float));
     offset += sizeof(float);
-    
+
     memcpy((char *)buffer + offset, &salary, sizeof(int));
     offset += sizeof(int);
-    
+
     *tupleSize = offset;
 }
 
@@ -55,34 +55,34 @@ void printTuple(const void *buffer, const int tupleSize)
 {
     int offset = 0;
     cout << "****Printing Buffer: Start****" << endl;
-   
-    int nameLength = 0;     
+
+    int nameLength = 0;
     memcpy(&nameLength, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "nameLength: " << nameLength << endl;
-   
+
     char *name = (char *)malloc(100);
     memcpy(name, (char *)buffer+offset, nameLength);
     name[nameLength] = '\0';
     offset += nameLength;
     cout << "name: " << name << endl;
-    
-    int age = 0; 
+
+    int age = 0;
     memcpy(&age, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "age: " << age << endl;
-   
-    float height = 0.0; 
+
+    float height = 0.0;
     memcpy(&height, (char *)buffer+offset, sizeof(float));
     offset += sizeof(float);
     cout << "height: " << height << endl;
-       
-    int salary = 0; 
+
+    int salary = 0;
     memcpy(&salary, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "salary: " << salary << endl;
 
-    cout << "****Printing Buffer: End****" << endl << endl;    
+    cout << "****Printing Buffer: End****" << endl << endl;
 }
 
 
@@ -91,21 +91,21 @@ void printTuple(const void *buffer, const int tupleSize)
 void prepareTupleAfterAdd(const int nameLength, const string &name, const int age, const float height, const int salary, const int ssn, void *buffer, int *tupleSize)
 {
     int offset=0;
-    
+
     memcpy((char*)buffer + offset, &(nameLength), sizeof(int));
-    offset += sizeof(int);    
+    offset += sizeof(int);
     memcpy((char*)buffer + offset, name.c_str(), nameLength);
     offset += nameLength;
-    
+
     memcpy((char*)buffer + offset, &age, sizeof(int));
     offset += sizeof(int);
-        
+
     memcpy((char*)buffer + offset, &height, sizeof(float));
     offset += sizeof(float);
-        
+
     memcpy((char*)buffer + offset, &salary, sizeof(int));
     offset += sizeof(int);
-    
+
     memcpy((char*)buffer + offset, &ssn, sizeof(int));
     offset += sizeof(int);
 
@@ -117,69 +117,69 @@ void printTupleAfterDrop( const void *buffer, const int tupleSize)
 {
     int offset = 0;
     cout << "****Printing Buffer: Start****" << endl;
-   
-    int nameLength = 0;     
+
+    int nameLength = 0;
     memcpy(&nameLength, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "nameLength: " << nameLength << endl;
-   
+
     char *name = (char *)malloc(100);
     memcpy(name, (char *)buffer+offset, nameLength);
     name[nameLength] = '\0';
     offset += nameLength;
     cout << "name: " << name << endl;
-    
-    int age = 0; 
+
+    int age = 0;
     memcpy(&age, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "age: " << age << endl;
-   
-    float height = 0.0; 
+
+    float height = 0.0;
     memcpy(&height, (char *)buffer+offset, sizeof(float));
     offset += sizeof(float);
     cout << "height: " << height << endl;
-       
-    cout << "****Printing Buffer: End****" << endl << endl;    
-}   
+
+    cout << "****Printing Buffer: End****" << endl << endl;
+}
 
 
 void printTupleAfterAdd(const void *buffer, const int tupleSize)
 {
     int offset = 0;
     cout << "****Printing Buffer: Start****" << endl;
-   
-    int nameLength = 0;     
+
+    int nameLength = 0;
     memcpy(&nameLength, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "nameLength: " << nameLength << endl;
-   
+
     char *name = (char *)malloc(100);
     memcpy(name, (char *)buffer+offset, nameLength);
     name[nameLength] = '\0';
     offset += nameLength;
     cout << "name: " << name << endl;
-    
-    int age = 0; 
+
+    int age = 0;
     memcpy(&age, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "age: " << age << endl;
-   
-    float height = 0; 
+
+    float height = 0;
     memcpy(&height, (char *)buffer+offset, sizeof(float));
     offset += sizeof(float);
     cout << "height: " << height << endl;
-	
-	int salary = 0; 
+
+	int salary = 0;
     memcpy(&salary, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "salary: " << salary << endl;
-    
-    int ssn = 0;   
+
+    int ssn = 0;
     memcpy(&ssn, (char *)buffer+offset, sizeof(int));
     offset += sizeof(int);
     cout << "SSN: " << ssn << endl;
 
-    cout << "****Printing Buffer: End****" << endl << endl;    
+    cout << "****Printing Buffer: End****" << endl << endl;
 }
 
 
@@ -187,7 +187,7 @@ void printTupleAfterAdd(const void *buffer, const int tupleSize)
 void createTable(const string &tableName)
 {
     cout << "****Create Table " << tableName << " ****" << endl;
-    
+
     // 1. Create Table ** -- made separate now.
     vector<Attribute> attrs;
 
@@ -221,7 +221,7 @@ void createTable(const string &tableName)
 void prepareLargeTuple(const int index, void *buffer, int *size)
 {
     int offset = 0;
-    
+
     // compute the count
     int count = index % 50 + 1;
 
@@ -238,17 +238,17 @@ void prepareLargeTuple(const int index, void *buffer, int *size)
             memcpy((char *)buffer + offset, &text, 1);
             offset += 1;
         }
-   
-        // compute the integer 
+
+        // compute the integer
         memcpy((char *)buffer + offset, &index, sizeof(int));
         offset += sizeof(int);
-   
+
         // compute the floating number
-        float real = (float)(index + 1); 
+        float real = (float)(index + 1);
         memcpy((char *)buffer + offset, &real, sizeof(float));
         offset += sizeof(float);
     }
-    *size = offset; 
+    *size = offset;
 }
 
 
@@ -256,7 +256,7 @@ void prepareLargeTuple(const int index, void *buffer, int *size)
 void createLargeTable(const string &tableName)
 {
     cout << "****Create Large Table " << tableName << " ****" << endl;
-    
+
     // 1. Create Table ** -- made separate now.
     vector<Attribute> attrs;
 
@@ -297,7 +297,7 @@ void createLargeTable(const string &tableName)
     free(suffix);
 }
 
-// Write RIDs to a disk - do not use this code. 
+// Write RIDs to a disk - do not use this code.
 //This is not a page-based operation. For test purpose only.
 void writeRIDsToDisk(vector<RID> &rids)
 {
@@ -316,7 +316,7 @@ void writeRIDsToDisk(vector<RID> &rids)
 	}
 }
 
-// Write sizes to a disk - do not use this code. 
+// Write sizes to a disk - do not use this code.
 //This is not a page-based operation. For test purpose only.
 void writeSizesToDisk(vector<int> &sizes)
 {
@@ -341,9 +341,9 @@ void readRIDsFromDisk(vector<RID> &rids, int numRecords)
 	RID tempRID;
 	unsigned pageNum;
 	unsigned slotNum;
-		
-	ifstream ridsFile("rids_file", ios::in | ios::binary);		
-	if (ridsFile.is_open()) {					
+
+	ifstream ridsFile("rids_file", ios::in | ios::binary);
+	if (ridsFile.is_open()) {
 		ridsFile.seekg(0,ios::beg);
 		for (int i = 0; i < numRecords; i++) {
 			ridsFile.read(reinterpret_cast<char*>(&pageNum), sizeof(unsigned));
@@ -356,15 +356,15 @@ void readRIDsFromDisk(vector<RID> &rids, int numRecords)
 	}
 }
 
-// Read sizes from the disk - do not use this code. 
+// Read sizes from the disk - do not use this code.
 //This is not a page-based operation. For test purpose only.
 void readSizesFromDisk(vector<int> &sizes, int numRecords)
-{	
+{
 	int size;
 
-	ifstream sizesFile("sizes_file", ios::in | ios::binary);		
+	ifstream sizesFile("sizes_file", ios::in | ios::binary);
 	if (sizesFile.is_open()) {
-					
+
 		sizesFile.seekg(0,ios::beg);
 		for (int i = 0; i < numRecords; i++) {
 			sizesFile.read(reinterpret_cast<char*>(&size), sizeof(int));

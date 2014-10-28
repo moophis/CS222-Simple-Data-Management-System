@@ -9,7 +9,7 @@ void TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     int numTuples = 2000;
     void *tuple = malloc(1000);
     void *returnedData = malloc(1000);
-    
+
     readRIDsFromDisk(rids, numTuples);
     readSizesFromDisk(sizes, numTuples);
 

@@ -5,10 +5,10 @@ void TEST_RM_1(const string &tableName, const int nameLength, const string &name
     // Functions tested
     // 1. Insert Tuple **
     // 2. Read Tuple **
-    // NOTE: "**" signifies the new functions being tested in this test case. 
+    // NOTE: "**" signifies the new functions being tested in this test case.
     cout << "****In Test Case 1****" << endl;
-   
-    RID rid; 
+
+    RID rid;
     int tupleSize = 0;
     void *tuple = malloc(100);
     void *returnedData = malloc(100);
@@ -19,7 +19,8 @@ void TEST_RM_1(const string &tableName, const int nameLength, const string &name
     printTuple(tuple, tupleSize);
     RC rc = rm->insertTuple(tableName, tuple, rid);
     assert(rc == success);
-    
+    cout << "+Inserted! @page " << rid.pageNum << " @slotNum " << rid.slotNum << endl;
+
     // Given the rid, read the tuple from table
     rc = rm->readTuple(tableName, rid, returnedData);
     assert(rc == success);

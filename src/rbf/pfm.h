@@ -2,6 +2,7 @@
 #define _pfm_h_
 
 #include <cstdio>
+#include <string>
 //#include <unordered_map>
 
 typedef int RC;
@@ -37,7 +38,9 @@ private:
     static PagedFileManager *_pf_manager;
 };
 
-
+// TODO: implement refreshPageCount() to calculate new page size
+// only if the current implementation of getNumberOfPages() really
+// slows down the program.
 class FileHandle
 {
 public:
@@ -56,8 +59,8 @@ public:
 
 private:
     FILE *filePtr;                                            // Associated file pointer
-    unsigned pageCount;                                       // Number of pages in the file
-    char *fileName;                                           // File name
+//    unsigned pageCount;                                       // Number of pages in the file
+    std::string fileName;                                           // File name
 };
 
 // Enum: status code

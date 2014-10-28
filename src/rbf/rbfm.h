@@ -220,6 +220,7 @@ public:
   bool hasFreeExistingSlot(void *page, unsigned short slotCount, unsigned short &firstFreeSlot);
   bool isTombstoneSlot(short startPos, short size); // Find whether the slot directory is tomb-stoned
   bool isOccupiedSlot(short startPos, short length); // Check whether the slot is normally occupied
+  bool isDeletedSlot(short startPos, short length); // Check whether the slot has been deleted
   void setTombstoneSlot(void *page, int slotNum, short newPageNum, short newSlotNum); // Set a slot as a tomb stone
   void getNewRecordPos(short startPos, short length, unsigned &newPageNum, unsigned &newSlotNum); // Get new position from tomb stone
   void nullifySlot(void *page, int slotNum);  // Set the slot directory null (record deletion)
@@ -233,7 +234,8 @@ private:
     SLOT_START_LEN = 2,
     SLOT_LEN_LEN   = 2,
   };
-  static map<string, FreeSpaceMap> __freeSpace;       // <file name, free space map>
+
+  map<string, FreeSpaceMap> __freeSpace;       // <file name, free space map>
   static SpaceManager *_sp_manager;   // SpaceManager instance
   static void *__buffer;              // the page buffer used to store a page temporarily
 
