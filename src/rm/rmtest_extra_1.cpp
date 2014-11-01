@@ -6,7 +6,6 @@
 #include <fstream>
 #include <iostream>
 #include <cassert>
-#include <sys/stat.h>
 
 #include "rm.h"
 
@@ -15,13 +14,6 @@ using namespace std;
 const int success = 0;
 
 RelationManager *rm = RelationManager::instance();
-
-bool FileExists(string fileName)
-{
-  struct stat stFileInfo;
-  if(stat(fileName.c_str(), &stFileInfo) == 0) return true;
-  else return false;
-}
 
 // Function to prepare the data in the correct form to be inserted/read/updated.
 void prepareTuple(const int nameLength, const string &name, const int age, const float height, const int salary, void *buffer, int *tupleSize)
@@ -275,9 +267,6 @@ int main()
 
     // Extra Credits
     cout << "Test Extra Credit 1 .." << endl;
-    if (FileExists("tbl_employee100")){
-      deleteTable("tbl_employee100");
-    }
     // Drop Attribute
     createTable("tbl_employee100");
     RM_TEST_EXTRA_1("tbl_employee100", 6, name1, 24, 170, 5000);

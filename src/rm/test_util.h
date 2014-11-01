@@ -11,7 +11,6 @@
 #include <cassert>
 #include <sys/time.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
 #include <set>
 #include "rm.h"
 
@@ -21,14 +20,6 @@ RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 
 RelationManager *rm = RelationManager::instance();
 const int success = 0;
-
-bool FileExists(string fileName)
-{
-	struct stat stFileInfo;
-	if(stat(fileName.c_str(), &stFileInfo) == 0) return true;
-	else return false;
-}
-
 
 void memProfile()
 {
@@ -226,16 +217,6 @@ void createTable(const string &tableName)
     RC rc = rm->createTable(tableName, attrs);
     assert(rc == success);
     cout << "****Table Created: " << tableName << " ****" << endl << endl;
-}
-
-// delete an employee table
-void deleteTable(const string &tableName)
-{
-    cout << "****Delete Table " << tableName << " ****" << endl;
-
-	RC rc = rm->deleteTable(tableName);
-    assert(rc == success);
-    cout << "****Table Deleted: " << tableName << " ****" << endl << endl;
 }
 
 void prepareLargeTuple(const int index, void *buffer, int *size)
