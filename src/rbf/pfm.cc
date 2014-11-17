@@ -130,6 +130,10 @@ FileHandle::FileHandle()
 //    pageCount = 0;
     filePtr   = NULL;
 //    fileName  = NULL;
+
+    readPageCounter = 0;
+    writePageCounter = 0;
+    appendPageCounter = 0;
 }
 
 
@@ -166,6 +170,8 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
     if (fread(data, sizeof(char), PAGE_SIZE, filePtr) != PAGE_SIZE) {
         return ERR_READ;
     }
+
+    readPageCounter++;
     return SUCCESSFUL;
 }
 
@@ -198,6 +204,7 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
         return ERR_WRITE;
     }
 
+    writePageCounter++;
     return SUCCESSFUL;
 }
 
@@ -221,6 +228,7 @@ RC FileHandle::appendPage(const void *data)
              << " current pageCount " << getNumberOfPages() << std::endl;
     }
 
+    appendPageCounter++;
     return rc;
 }
 
@@ -299,4 +307,16 @@ char *FileHandle::getFileName() {
  */
 void FileHandle::setFileName(const char *name) {
     fileName = std::string((char *)name);
+}
+
+
+/**
+ * Collect statistics.
+ */
+RC FileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount) {
+    readPageCount = this->readPageCounter;
+    writePageCount = this->writePageCounter;
+    appendPageCount = this->appendPageCounter;
+
+    return SUCCESSFUL;
 }

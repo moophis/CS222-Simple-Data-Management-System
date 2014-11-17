@@ -38,9 +38,6 @@ private:
     static PagedFileManager *_pf_manager;
 };
 
-// TODO: implement refreshPageCount() to calculate new page size
-// only if the current implementation of getNumberOfPages() really
-// slows down the program.
 class FileHandle
 {
 public:
@@ -57,10 +54,18 @@ public:
     char *getFileName();                                                // Get the file name
     void setFileName(const char *name);                                 // Set the file name
 
+    // New method - put the current counter values into variables
+    RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
+
 private:
     FILE *filePtr;                                            // Associated file pointer
 //    unsigned pageCount;                                       // Number of pages in the file
     std::string fileName;                                           // File name
+
+    // variables to keep counter for each operation
+    unsigned readPageCounter;
+    unsigned writePageCounter;
+    unsigned appendPageCounter;
 };
 
 // Enum: status code
