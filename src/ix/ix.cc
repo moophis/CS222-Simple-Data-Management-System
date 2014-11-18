@@ -116,7 +116,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     }
 
     // Count the bucket number
-    unsigned bucket = calcBucketNumber(keyValue, metadata);
+    unsigned bucket = calcBucketNumber(keyValue, attribute, metadata);
 
     // Check if the current bucket has been initialized, if not grow the bucket
     if (ixfileHandle._primaryHandle.getNumberOfPages() == 0) {
@@ -128,6 +128,14 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     // Load all pages within this bucket
     vector<DataPage *> cachedPages;
     loadBucketChain(cachedPages, ixfileHandle, bucket, attribute.type);
+
+    // Check whether the same <key, RID> pair already exists in the bucket
+    for (size_t i = 0; i < cachedPages.size(); i++) {
+        DataPage *curPage = cachedPages[i];
+        if (curPage->doExist(keyValue, rid)) {
+            return ERR_DUPLICATE_ENTRY;
+        }
+    }
 
     // Check whether we need insert a new overflow page
     // If not, just insert the entry
@@ -174,7 +182,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         metadata.setCurrentBucketCount(n);
         metadata.setPrimaryPageCount(total);
         // 2. Redistribute entries between two buckets
-        rebalanceBetween(ixfileHandle, from, cachedPages, to, newCache, metadata);
+        rebalanceBetween(ixfileHandle, from, cachedPages, to, newCache, metadata, attribute);
 
         // flush new bucket
         flushBucketChain(newCache);
@@ -186,12 +194,80 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     // Update total entries count
     metadata.setEntryCount(metadata.getEntryCount() + 1);
 
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-	return -1;
+    RC err;
+
+    KeyValue keyValue(key, attribute.type);
+    MetadataPage metadata(ixfileHandle._overflowHandle);
+    if (!metadata.isInitialized()) {
+        return ERR_METADATA_MISSING;
+    }
+
+    // Count the bucket number
+    unsigned bucket = calcBucketNumber(keyValue, attribute, metadata);
+
+    // Check if the current bucket has been initialized, if not grow the bucket
+    if (ixfileHandle._primaryHandle.getNumberOfPages() == 0) {
+        if ((err = growToFit(ixfileHandle, metadata.getPrimaryPageCount(), attribute.type)) != SUCCESSFUL) {
+            return err;
+        }
+    }
+
+    // Load all pages within this bucket and delete
+    bool deleted = false;
+    vector<DataPage *> cachedPages;
+    loadBucketChain(cachedPages, ixfileHandle, bucket, attribute.type);
+    for (size_t i = 0; i < cachedPages.size(); i++) {
+        DataPage *p = cachedPages[i];
+        if ((err = p->remove(keyValue, rid)) == SUCCESSFUL) {
+            deleted = true;
+            break;
+        }
+        if (err != ERR_ENTRY_NOT_FOUND) {
+            return err;
+        }
+    }
+
+    if (!deleted) {
+        return ERR_ENTRY_NOT_FOUND;
+    }
+
+    // Rearrange pages within a page once find an empty page
+    bool emptyBucket = false;
+    rebalanceWithin(ixfileHandle, bucket, cachedPages, emptyBucket);
+
+    // Update metadata
+    unsigned p = metadata.getNextSplitBucket();
+    unsigned n = metadata.getCurrentBucketCount();
+    unsigned total = metadata.getPrimaryPageCount();
+    unsigned init = metadata.getInitialBucketCount();
+    while (emptyBucket && bucket == total - 1 && total > init) {
+        // Shrink the bucket
+        total--;
+        if (p == 0) {
+            n >>= 1;
+            p = n - 1;
+        } else {
+            p--;
+        }
+        // Continue shrinking if the new last bucket is still empty
+        vector<DataPage *> cache;
+        bucket = total - 1;
+        loadBucketChain(cache, ixfileHandle, bucket, attribute.type);
+        rebalanceWithin(ixfileHandle, bucket, cache, emptyBucket);
+    }
+    metadata.setNextSplitBucket(p);
+    metadata.setCurrentBucketCount(n);
+    metadata.setPrimaryPageCount(total);
+
+    // flush bucket
+    flushBucketChain(cachedPages);
+
+    return SUCCESSFUL;
 }
 
 unsigned IndexManager::hash(const Attribute &attribute, const void *key)
@@ -206,7 +282,10 @@ RC IndexManager::printIndexEntriesInAPage(IXFileHandle &ixfileHandle, const Attr
 
 RC IndexManager::getNumberOfPrimaryPages(IXFileHandle &ixfileHandle, unsigned &numberOfPrimaryPages)
 {
-	return -1;
+    MetadataPage metadata(ixfileHandle._overflowHandle);
+    numberOfPrimaryPages = metadata.getPrimaryPageCount();
+
+    return SUCCESSFUL;
 }
 
 RC IndexManager::getNumberOfAllPages(IXFileHandle &ixfileHandle, unsigned &numberOfAllPages)
@@ -219,11 +298,55 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
     const Attribute &attribute,
     const void      *lowKey,
     const void      *highKey,
-    bool			lowKeyInclusive,
-    bool        	highKeyInclusive,
+    bool            lowKeyInclusive,
+    bool            highKeyInclusive,
     IX_ScanIterator &ix_ScanIterator)
 {
-	return -1;
+    RC err;
+
+    MetadataPage metadata(ixfileHandle._overflowHandle);
+    if (!metadata.isInitialized()) {
+        return ERR_METADATA_MISSING;
+    }
+
+    // Check if the current bucket has been initialized, if not grow the bucket
+    if (ixfileHandle._primaryHandle.getNumberOfPages() == 0) {
+        if ((err = growToFit(ixfileHandle, metadata.getPrimaryPageCount(), attribute.type)) != SUCCESSFUL) {
+            return err;
+        }
+    }
+
+    ix_ScanIterator._ixm = IndexManager::instance();
+    ix_ScanIterator._active = true;
+    ix_ScanIterator._ixFileHandle = ixfileHandle;
+    ix_ScanIterator._lowInclusive = lowKeyInclusive;
+    ix_ScanIterator._highInclusive = highKeyInclusive;
+    ix_ScanIterator._hasLowerBound = (lowKey != nullptr);
+    ix_ScanIterator._hasUpperBound = (highKey != nullptr);
+    if (ix_ScanIterator._hasLowerBound) {
+        ix_ScanIterator._lowKey = KeyValue(lowKey, attribute.type);
+    }
+    if (ix_ScanIterator._hasUpperBound) {
+        ix_ScanIterator._highKey = KeyValue(lowKey, attribute.type);
+    }
+    ix_ScanIterator._keyType = attribute.type;
+    if ((lowKeyInclusive == highKeyInclusive) && ix_ScanIterator._hasLowerBound
+            && ix_ScanIterator._hasUpperBound
+            && ix_ScanIterator._lowKey.compare(ix_ScanIterator._highKey)) {
+        ix_ScanIterator._scanType = HASH_SCAN;
+        ix_ScanIterator._curBucketNum = calcBucketNumber(ix_ScanIterator._lowKey, attribute, metadata);
+        ix_ScanIterator._curPageIndex = 0;
+        ix_ScanIterator._curHashIndex = 0;
+    } else {
+        ix_ScanIterator._scanType = RANGE_SCAN;
+        ix_ScanIterator._curBucketNum = 0;
+        ix_ScanIterator._curPageIndex = 0;
+        ix_ScanIterator._curRangeIndex = 0;
+    }
+    ix_ScanIterator._totalBucketNum = metadata.getPrimaryPageCount();
+    ix_ScanIterator._curBucket.clear();
+
+    return SUCCESSFUL;
 }
 
 void IndexManager::loadBucketChain(vector<DataPage *> &buf, IXFileHandle &ixfileHandle,
@@ -248,7 +371,7 @@ void IndexManager::flushBucketChain(vector<DataPage *> &buf) {
 }
 
 RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket, vector<DataPage *> &oldCache,
-          unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata) {
+          unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata, const Attribute &attribute) {
     unsigned cur = 0;
     vector<DataPage *> updatedCache;
 
@@ -267,7 +390,7 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
             RID rid;
             curPage->keyAt(j, key);
             curPage->ridAt(j, rid);
-            unsigned bucket = calcBucketNumber(key, metadata);
+            unsigned bucket = calcBucketNumber(key, attribute, metadata);
             if (bucket == oldBucket) {
                 if (!updatedCache[cur]->hasSpace(key)) {
                     DataPage *dp = oldCache[++cur];   // Index should not be out of bound here
@@ -299,17 +422,61 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
     return SUCCESSFUL;
 }
 
-RC IndexManager::growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType) {
-    return -1;
+RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
+            vector<DataPage *> &cache, bool &emptyBucket) {
+    emptyBucket = false;
+    if (cache.size() == 1 && cache[0]->getEntriesCount() == 0) {
+        emptyBucket = true;
+        return SUCCESSFUL;
+    }
+    if (cache.size() > 1) {
+        DataPage *before = cache[0], *after = cache[1];
+        if (before->getEntriesCount() == 0) {
+            before->_keys = after->_keys;
+            before->_rids = after->_rids;
+            before->setNextPageNum(after->getNextPageNum());
+            after->discard();
+        } else {
+            for (size_t i = 1; i < cache.size(); i++) {
+                if (cache[i]->getEntriesCount() == 0) {
+                    cache[i-1]->setNextPageNum(cache[i]->getNextPageNum());
+                    cache[i]->discard();
+                    break;
+                }
+            }
+        }
+    }
+
+    return SUCCESSFUL;
 }
 
-unsigned IndexManager::calcBucketNumber(const KeyValue &keyValue, const MetadataPage &metadata) const {
-    return 0;
+RC IndexManager::growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType) {
+    unsigned start = ixfileHandle._primaryHandle.getNumberOfPages();
+    for (unsigned i = start; i < pageNum; i++) {
+        DataPage dp(ixfileHandle._primaryHandle, PRIMARY_PAGE, (AttrType &) keyType, i, true);
+    }
+
+    return SUCCESSFUL;
+}
+
+unsigned IndexManager::calcBucketNumber(KeyValue &keyValue, const Attribute &attribute,
+        MetadataPage &metadata) {
+    char raw[PAGE_SIZE];
+    keyValue.getRaw(raw);
+    unsigned hashVal = hash(attribute, raw);
+    unsigned p = metadata.getNextSplitBucket();
+    unsigned n = metadata.getCurrentBucketCount();
+    unsigned bucket = hashVal & (n - 1);
+    if (bucket < p) {
+        bucket = hashVal & ((n << 1) - 1);
+    }
+    return bucket;
 }
 
 // IX Scan Iterator implementations
 IX_ScanIterator::IX_ScanIterator()
 {
+    this->_active = true;
 }
 
 IX_ScanIterator::~IX_ScanIterator()
@@ -318,14 +485,53 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-	return -1;
+    if (_scanType == HASH_SCAN) {
+        return getNextHashMatch(rid, key);
+    } else if (_scanType == RANGE_SCAN) {
+        return getNextRangeMatch(rid, key);
+    } else {
+        return IX_EOF;
+    }
 }
 
 RC IX_ScanIterator::close()
 {
-	return -1;
+    _ixm->flushBucketChain(_curBucket);
+    this->_active = false;
+	return SUCCESSFUL;
 }
 
+RC IX_ScanIterator::getNextHashMatch(RID &rid, void *key) {
+    if (_curBucket.empty()) {
+        _ixm->loadBucketChain(_curBucket, _ixFileHandle, _curBucketNum, _keyType);
+    }
+
+    while (_curPageIndex < _curBucket.size()) {
+        DataPage *page = _curBucket[_curPageIndex];
+        vector<int> indexes;
+        page->findKeyIndexes(_lowKey, indexes);
+
+        if (_curHashIndex >= indexes.size()) {
+            _curHashIndex = 0;
+            _curPageIndex++;
+        } else {
+            // found one entry
+            _lowKey.getRaw(key);
+            if (page->ridAt(indexes[_curHashIndex++], rid) != SUCCESSFUL) {
+                // error should not happen
+                __trace();
+                return IX_EOF;
+            }
+            return SUCCESSFUL;
+        }
+    }
+
+    return IX_EOF;
+}
+
+RC IX_ScanIterator::getNextRangeMatch(RID &rid, void *key) {
+    return -1;
+}
 
 IXFileHandle::IXFileHandle()
 {
@@ -356,7 +562,7 @@ MetadataPage::MetadataPage(FileHandle &handle) : _fileHandle(handle), _dirty(fal
 }
 
 MetadataPage::~MetadataPage() {
-    if (_initialized && _dirty) {
+    if (_initialized || _dirty) {
         RC err = flush();
         assert(err == SUCCESSFUL);
     }
@@ -508,6 +714,7 @@ RC DataPage::initialize() {
     _keys.clear();
     _rids.clear();
     _entryMap.clear();
+    _dirty = true;
     return SUCCESSFUL;
 }
 
@@ -574,9 +781,31 @@ RC DataPage::ridAt(unsigned index, RID &rid) {
     return SUCCESSFUL;
 }
 
+RC DataPage::findKeyIndexes(KeyValue &key, vector<int> &indexes) {
+    string keystr = key.toString();
+    if (_entryMap.count(keystr) != 0) {
+        indexes = _entryMap[keystr];
+    }
+    return SUCCESSFUL;
+}
+
 bool DataPage::hasSpace(KeyValue &key) {
     size_t esize = entrySize(key);
     return esize + _entriesSize < 6 * META_UNIT;
+}
+
+bool DataPage::doExist(KeyValue &key, const RID &rid) {
+    string keystr = key.toString();
+    if (_entryMap.count(keystr) != 0) {
+        vector<int> &indexes = _entryMap[keystr];
+        for (size_t i = 0; i < indexes.size(); i++) {
+            if (_rids[indexes[i]] == rid) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 RC DataPage::insert(KeyValue &key, const RID &rid) {

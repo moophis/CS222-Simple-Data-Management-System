@@ -26,6 +26,7 @@ enum {
     ERR_METADATA_MISSING    = -304,     // error: cannot find metadata
     ERR_NO_SPACE            = -305,     // error: page doesn't have enough space
     ERR_ENTRY_NOT_FOUND     = -306,     // error: cannot find the entry
+    ERR_DUPLICATE_ENTRY     = -307,     // error: duplicate entry found in the same page
 };
 
 class IX_ScanIterator;
@@ -36,6 +37,7 @@ class MetadataPage;
 class DataPage;
 
 class IndexManager {
+  friend class IX_ScanIterator;
  public:
   static IndexManager* instance();
 
@@ -119,98 +121,19 @@ class IndexManager {
   // flush all pages within a given bucket
   void flushBucketChain(vector<DataPage *> &buf);
 
-  // Redistribute entries between two buckets (used for split operation)
+  // Redistribute entries between two bucket chains (used for split operation)
   RC rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket, vector<DataPage *> &oldCache,
-          unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata);
+          unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata, const Attribute &attribute);
+
+  // Redistributed entries within a bucket chain (used when there is at least one emtpy page)
+  // Check whether the bucket chain is empty.
+  RC rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket, vector<DataPage *> &cache, bool &emptyBucket);
 
   // Grow primary page(s) until the file can hold up to the page of #pageNum
   RC growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType);
 
   // Find the bucket number according to the key and current state
-  unsigned calcBucketNumber(const KeyValue &keyValue, const MetadataPage &metadata) const;
-};
-
-
-class IX_ScanIterator {
- public:
-  IX_ScanIterator();  							// Constructor
-  ~IX_ScanIterator(); 							// Destructor
-
-  RC getNextEntry(RID &rid, void *key);  		// Get next matching entry
-  RC close();             						// Terminate index scan
-};
-
-
-class IXFileHandle {
-    friend class IndexManager;
-
-public:
-	// Put the current counter values of associated PF FileHandles into variables
-    RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
-
-    IXFileHandle();  							// Constructor
-    ~IXFileHandle(); 							// Destructor
-
-private:
-    unsigned _readPageCounter;
-    unsigned _writePageCounter;
-    unsigned _appendPageCounter;
-    FileHandle _primaryHandle;
-    FileHandle _overflowHandle;
-
-private:
-
-};
-
-// print out the error message for a given return code
-void IX_PrintError (RC rc);
-
-
-// The class to manipulate metadata page
-class MetadataPage {
-    friend class IndexManager;
-private:
-    // metadata page resides in the 1st page of overflow page file
-    static const int METADATA_PAGENUM = 0;
-
-    // The following variables are sequentially aligned in overflow page file
-    unsigned _entryCount;       // total count of entries in the index
-    unsigned _primaryPageCount; // total count of primary pages (current level pages+ new split pages in this level)
-    unsigned _overflowPageCount; // total count of overflow pages (including lazily deleted ones)
-    unsigned _currentBucketCount;  // the # of current buckets (primary pages)
-    unsigned _nextSplitBucket;     // the next page to be split
-    unsigned _initialBucketCount;  // the initial # of bucket (power of 2)
-
-    FileHandle _fileHandle;        // associated file handle to the metadata file
-    bool _initialized;             // whether the page has been initialized
-    bool _dirty;                   // indicate whether the page has been changed
-
-public:
-    MetadataPage(FileHandle &handle);
-    ~MetadataPage();
-
-    // initialize the metadata page
-    RC initialize(const unsigned &numberOfPages);
-
-    // load the metadata page
-    RC load();
-
-    // write back the metadata into the file
-    RC flush();
-
-    unsigned getEntryCount();
-    void setEntryCount(unsigned entryCount);
-    unsigned getPrimaryPageCount();
-    void setPrimaryPageCount(unsigned primaryPageCount);
-    unsigned getOverflowPageCount();
-    void setOverflowPageCount(unsigned overflowPageCount);
-    unsigned getCurrentBucketCount();
-    void setCurrentBucketCount(unsigned currentBucketCount);
-    unsigned getNextSplitBucket();
-    void setNextSplitBucket(unsigned nextSplitBucket);
-    unsigned getInitialBucketCount();
-    bool isInitialized();
-    void setInitialized(bool initialized);
+  unsigned calcBucketNumber(KeyValue &keyValue, const Attribute &attribute, MetadataPage &metadata);
 };
 
 // Define (immutable) key value type (Int, Real, Varchar)
@@ -268,6 +191,32 @@ public:
         }
     }
 
+    // Get value (Note that only value fetch operation with match
+    // type will succeed)
+    bool getInt(int &val) {
+        if (_keyType == TypeInt) {
+            val = _int;
+            return true;
+        }
+        return false;
+    }
+
+    bool getReal(float &val) {
+        if (_keyType == TypeReal) {
+            val = _float;
+            return true;
+        }
+        return false;
+    }
+
+    bool getVarChar(string &val) {
+        if (_keyType == TypeVarChar) {
+            val = _varchar;
+            return true;
+        }
+        return false;
+    }
+
     // Get type
     AttrType getType() { return _keyType; }
 
@@ -310,6 +259,30 @@ public:
         }
     }
 
+    // Comparison function
+    // return 0 if equal, 1 if this > that, -1 if this < that
+    int compare(KeyValue &that) {
+        assert(_keyType == that.getType());
+        switch (_keyType) {
+        case TypeInt:
+            int ival;
+            that.getInt(ival);
+            return (_int == ival) ? 0 : ((_int > ival) ? 1 : -1);
+        case TypeReal:
+            float rval;
+            that.getReal(rval);
+            return (_float == rval) ? 0 : ((_float > rval) ? 1 : -1);
+        case TypeVarChar: {
+            string sval;
+            that.getVarChar(sval);
+            return _varchar.compare(sval);
+        }
+        default:
+            __trace();
+            return PAGE_SIZE;
+        }
+    }
+
 private:
     int _int;
     float _float;
@@ -317,6 +290,121 @@ private:
     AttrType _keyType;
     size_t _size;
 };
+
+// Index File Handle
+class IXFileHandle {
+    friend class IndexManager;
+    friend class IX_ScanIterator;
+
+public:
+    // Put the current counter values of associated PF FileHandles into variables
+    RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);
+
+    IXFileHandle();                             // Constructor
+    ~IXFileHandle();                            // Destructor
+
+private:
+    unsigned _readPageCounter;
+    unsigned _writePageCounter;
+    unsigned _appendPageCounter;
+    FileHandle _primaryHandle;
+    FileHandle _overflowHandle;
+};
+
+// Scan Iterator
+typedef enum {
+    HASH_SCAN,
+    RANGE_SCAN,
+} ScanType;
+
+class IX_ScanIterator {
+  friend class IndexManager;
+public:
+  IX_ScanIterator();  							// Constructor
+  ~IX_ScanIterator(); 							// Destructor
+
+  RC getNextEntry(RID &rid, void *key);  		// Get next matching entry
+  RC close();             						// Terminate index scan
+
+private:
+  // Get next exact match entry
+  RC getNextHashMatch(RID &rid, void *key);
+  // Get next range match entry
+  RC getNextRangeMatch(RID &rid, void *key);
+
+private:
+  IndexManager *_ixm;           // Instance of the index manager
+  bool _active;                 // Indicate whether the iterator is active
+  ScanType _scanType;           // Type of scan (hash or range)
+  IXFileHandle _ixFileHandle;   // File handle
+  bool _hasLowerBound;
+  bool _hasUpperBound;
+  bool _lowInclusive;
+  bool _highInclusive;
+  KeyValue _lowKey;
+  KeyValue _highKey;
+  AttrType _keyType;
+
+  // Cache the entire bucket chain
+  vector<DataPage *> _curBucket;
+  unsigned _curBucketNum;   // the # of currently buffered bucket
+  unsigned _totalBucketNum; // total bucket number
+  unsigned _curPageIndex;   // _curBucket[_curPageIndex]
+  unsigned _curHashIndex;   // Used in hash scan: _entryMap[key][_curHashIndex]
+  unsigned _curRangeIndex;  // Used in range scan: _keys[_curRangeIndex]
+};
+
+// print out the error message for a given return code
+void IX_PrintError (RC rc);
+
+
+// The class to manipulate metadata page
+class MetadataPage {
+    friend class IndexManager;
+private:
+    // metadata page resides in the 1st page of overflow page file
+    static const int METADATA_PAGENUM = 0;
+
+    // The following variables are sequentially aligned in overflow page file
+    unsigned _entryCount;       // total count of entries in the index
+    unsigned _primaryPageCount; // total count of primary pages (current level pages + new split pages in this level)
+    unsigned _overflowPageCount; // total count of overflow pages (including lazily deleted ones)
+    unsigned _currentBucketCount;  // the # of current buckets (primary pages)
+    unsigned _nextSplitBucket;     // the next page to be split
+    unsigned _initialBucketCount;  // the initial # of bucket (power of 2)
+
+    FileHandle _fileHandle;        // associated file handle to the metadata file
+    bool _initialized;             // whether the page has been initialized
+    bool _dirty;                   // indicate whether the page has been changed
+
+public:
+    MetadataPage(FileHandle &handle);
+    ~MetadataPage();
+
+    // initialize the metadata page
+    RC initialize(const unsigned &numberOfPages);
+
+    // load the metadata page
+    RC load();
+
+    // write back the metadata into the file
+    RC flush();
+
+    unsigned getEntryCount();
+    void setEntryCount(unsigned entryCount);
+    unsigned getPrimaryPageCount();
+    void setPrimaryPageCount(unsigned primaryPageCount);
+    unsigned getOverflowPageCount();
+    void setOverflowPageCount(unsigned overflowPageCount);
+    unsigned getCurrentBucketCount();
+    void setCurrentBucketCount(unsigned currentBucketCount);
+    unsigned getNextSplitBucket();
+    void setNextSplitBucket(unsigned nextSplitBucket);
+    unsigned getInitialBucketCount();
+    bool isInitialized();
+    void setInitialized(bool initialized);
+};
+
 
 typedef enum {
     PRIMARY_PAGE = 0,
@@ -368,8 +456,14 @@ public:
     // Find RID given index
     RC ridAt(unsigned index, RID &rid);
 
+    // Find indexes of entries with specified key
+    RC findKeyIndexes(KeyValue &key, vector<int> &indexes);
+
     // Check whether there are still space to store a new entry
     bool hasSpace(KeyValue &key);
+
+    // Check whether a <key, RID> pair exists in the page
+    bool doExist(KeyValue &key, const RID &rid);
 
     // Insert a <key, RID> pair in the current page
     RC insert(KeyValue &key, const RID &rid);
