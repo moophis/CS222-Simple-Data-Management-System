@@ -3,52 +3,46 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
-#include <algorithm>
 
 #include "ix.h"
 #include "ixtest_util.h"
 
 IndexManager *indexManager;
 
-int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
+int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
 {
-	// Checks whether deleting an entry after getNextEntry() for RANGE SCAN case is handled properly or not.
+	// Checks whether deleting an entry after getNextEntry() for EXACT MATCH case is handled properly or not.
 	//
-	// Extra test case for Undergrads and Grads.
-	// Pass: 5 extra credit points for Undergrads if their code passes all of 2a - 2d.
-	//       5 extra credit points for Grads if their code passes all of 2a - 2d.
-	// Fail: no extra points for Undergrads and Grads.
-	//
+	// Extra test case for Undergrads. Mandatory for Grads.
+	// Pass: 5 extra credit points for Undergrads.
+	//       No score deduction for Grads.
+	// Fail: no extra points for Undergrads. Points will be deducted for Grads.
+	
     // Functions tested
-    // 1. Create Index
-    // 2. OpenIndex
+    // 1. Create Index File
+    // 2. OpenIndex File
     // 3. Insert entry
-    // 4. Scan entries, and delete entries
+    // 4. Scan entries - EXACT MATCH, and delete entries
     // 5. Scan close
-    // 6. Insert entries again
-    // 7. Scan entries
-    // 8. CloseIndex
-    // 9. DestroyIndex
+    // 6. CloseIndex File
+    // 7. DestroyIndex File
     // NOTE: "**" signifies the new functions being tested in this test case.
-    cout << endl << "****In Extra Test Case 2c****" << endl;
+    cout << endl << "****In Extra Test Case 2****" << endl;
 
     RC rc;
     RID rid;
     IXFileHandle ixfileHandle;
     IX_ScanIterator ix_ScanIterator;
-    int compVal;
-    int numOfTuples;
+    float compVal = 100.0;
+    unsigned numOfTuples = 500;
     unsigned numberOfPages = 4;
-    int A[30000];
-    int B[20000];
-    int count = 0;
-    int key;
+    float key;
 
-    //create index file(s)
+    // create index file
     rc = indexManager->createFile(indexFileName, numberOfPages);
     if(rc == success)
     {
-        cout << "Index Created!" << endl;
+        cout << "Index File Created!" << endl;
     }
     else
     {
@@ -56,7 +50,7 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    //open index file
+    // open index file
     rc = indexManager->openFile(indexFileName, ixfileHandle);
     if(rc == success)
     {
@@ -69,19 +63,13 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    // insert entry
-    numOfTuples = 30000;
-    for(int i = 0; i < numOfTuples; i++)
-    {
-        A[i] = i;
-    }
-    random_shuffle(A, A+numOfTuples);
+    // InsertEntry
+    key = compVal;
 
-    for(int i = 0; i < numOfTuples; i++)
+    for(unsigned i = 1; i <= numOfTuples; i++)
     {
-        key = A[i];
-        rid.pageNum = i+1;
-        rid.slotNum = i+1;
+        rid.pageNum = i;
+        rid.slotNum = i;
 
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         if(rc != success)
@@ -92,9 +80,8 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
         }
     }
 
-    //scan
-    compVal = 20000;
-    rc = indexManager->scan(ixfileHandle, attribute, NULL, &compVal, true, true, ix_ScanIterator);
+    // scan - EXACT MATCH
+    rc = indexManager->scan(ixfileHandle, attribute, &compVal, &compVal, true, true, ix_ScanIterator);
     if(rc == success)
     {
         cout << "Scan Opened Successfully!" << endl;
@@ -106,15 +93,13 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    // Test DeleteEntry in IndexScan Iterator
-    count = 0;
+    // DeleteEntry in IndexScan Iterator
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        if(count % 1000 == 0) {
+    	if (rid.pageNum % 100 == 0) {
             cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
-        }
+    	}
 
-        key = A[rid.pageNum-1];
         rc = indexManager->deleteEntry(ixfileHandle, attribute, &key, rid);
         if(rc != success)
         {
@@ -122,12 +107,54 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
         	ix_ScanIterator.close();
         	return fail;
         }
-        count++;
     }
-    cout << "Number of deleted entries: " << count << endl;
-    if (count != 20001)
+    cout << endl;
+
+    // close scan
+    rc = ix_ScanIterator.close();
+    if(rc == success)
     {
-        cout << "Wrong entries output...failure" << endl;
+        cout << "Scan Closed Successfully!" << endl;
+    }
+    else
+    {
+        cout << "Failed Closing Scan..." << endl;
+    	indexManager->closeFile(ixfileHandle);
+    	return fail;
+    }
+
+    // Open Scan again
+    rc = indexManager->scan(ixfileHandle, attribute, &compVal, &compVal, true, true, ix_ScanIterator);
+    if(rc == success)
+    {
+        cout << "Scan Opened Successfully!" << endl;
+    }
+    else
+    {
+        cout << "Failed Opening Scan..." << endl;
+    	indexManager->closeFile(ixfileHandle);
+    	return fail;
+    }
+
+    bool testFailed = false;
+
+    //iterate
+    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
+    {
+        cout << "Entry returned: " << rid.pageNum << " " << rid.slotNum << " --- Test failed." << endl;
+        testFailed = true;
+
+        if(rid.pageNum > 500)
+        {
+            cout << "Wrong entries output... failure" << endl;
+        	ix_ScanIterator.close();
+        	return fail;
+        }
+        
+    }
+
+    if (testFailed) {
+    	cout << "Wrong entries output... failure" << endl;
     	ix_ScanIterator.close();
     	return fail;
     }
@@ -145,75 +172,7 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    // insert entry Again
-    numOfTuples = 20000;
-    for(int i = 0; i < numOfTuples; i++)
-    {
-        B[i] = 30000+i;
-    }
-    random_shuffle(B, B+numOfTuples);
-
-    for(int i = 0; i < numOfTuples; i++)
-    {
-        key = B[i];
-        rid.pageNum = i+30001;
-        rid.slotNum = i+30001;
-
-        rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
-        if(rc != success)
-        {
-            cout << "Failed Inserting Keys..." << endl;
-        	indexManager->closeFile(ixfileHandle);
-        	return fail;
-        }
-    }
-
-    //scan
-    compVal = 35000;
-    rc = indexManager->scan(ixfileHandle, attribute, NULL, &compVal, true, true, ix_ScanIterator);
-    if(rc == success)
-    {
-        cout << "Scan Opened Successfully!" << endl;
-    }
-    else
-    {
-        cout << "Failed Opening Scan..." << endl;
-    	indexManager->closeFile(ixfileHandle);
-    	return fail;
-    }
-
-    cout << endl;
-    count = 0;
-    while(ix_ScanIterator.getNextEntry(rid, &key) == success)
-    {
-        if (count % 1000 == 0) {
-            cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
-        }
-
-        if(rid.pageNum > 30000 && B[rid.pageNum-30001] > 35000)
-        {
-            cout << "Wrong entries output...failure" << endl;
-        	ix_ScanIterator.close();
-        	return fail;
-        }
-        count ++;
-    }
-    cout << "Number of scanned entries: " << count << endl;
-
-    //close scan
-    rc = ix_ScanIterator.close();
-    if(rc == success)
-    {
-        cout << "Scan Closed Successfully!" << endl;
-    }
-    else
-    {
-        cout << "Failed Closing Scan..." << endl;
-    	indexManager->closeFile(ixfileHandle);
-    	return fail;
-    }
-
-    //close index file(s)
+    //close index file file
     rc = indexManager->closeFile(ixfileHandle);
     if(rc == success)
     {
@@ -226,7 +185,7 @@ int testCase_extra_2c(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    //destroy index file(s)
+    //destroy index file file
     rc = indexManager->destroyFile(indexFileName);
     if(rc == success)
     {
@@ -247,18 +206,18 @@ int main()
     //Global Initializations
     indexManager = IndexManager::instance();
 
-	const string indexFileName = "age_idx";
-	Attribute attrAge;
-	attrAge.length = 4;
-	attrAge.name = "age";
-	attrAge.type = TypeInt;
+	const string indexFileName = "height_idx";
+	Attribute attrHeight;
+	attrHeight.length = 4;
+	attrHeight.name = "height";
+	attrHeight.type = TypeReal;
 
-	RC result = testCase_extra_2c(indexFileName, attrAge);
+	RC result = testCase_extra_2(indexFileName, attrHeight);
     if (result == success) {
-    	cout << "IX_Test Extra Case 2c passed." << endl;
+    	cout << "IX_Test Extra Case 2 passed." << endl;
     	return success;
     } else {
-    	cout << "IX_Test Extra Case 2c failed. Deleting an entry after getNextEntry() for RANGE SCAN is not properly handled." << endl;
+    	cout << "IX_Test Extra Case 2 failed.  Deleting an entry after getNextEntry() for EXACT MATCH is not  properly handled." << endl;
     	return fail;
     }
 

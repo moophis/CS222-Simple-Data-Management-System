@@ -15,10 +15,11 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
     // 1. Open Index file
     // 2. Insert entry **
     // 3. Disk I/O check of Insertion - CollectCounterValues **
-    // 4. Delete entry **
-    // 5. Disk I/O check of Deletion - CollectCounterValues **
-    // 4. Delete entry -- when the value is not there **
-    // 5. Close Index file
+    // 4. Disk I/O check of Scan and getNextEntry - CollectCounterValues **
+    // 5. Delete entry **
+    // 6. Disk I/O check of Deletion - CollectCounterValues **
+    // 7. Delete entry -- when the value is not there: should fail **
+    // 8. Close Index file
     // NOTE: "**" signifies the new functions being tested in this test case.
     cout << endl << "****In Test Case 2****" << endl;
 
@@ -54,6 +55,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
         return fail;
     }
 
+    // collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount, writePageCount, appendPageCount);
     if(rc != success)
     {
@@ -76,6 +78,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
         }
     }
 
+    // collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount1, writePageCount1, appendPageCount1);
 	if(rc != success)
     {
@@ -98,7 +101,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
 	} 
 	
 	
-
+	// collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount, writePageCount, appendPageCount);
 	if(rc != success)
     {
@@ -127,6 +130,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
         cout << "Returned rid from a scan: " << rid.pageNum << " " << rid.slotNum << endl;
     }
 
+    // collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount1, writePageCount1, appendPageCount1);
 	if(rc != success)
     {
@@ -148,7 +152,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
 		return fail;
 	} 
 	
-	
+	// collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount, writePageCount, appendPageCount);
 	if(rc != success)
     {
@@ -167,6 +171,7 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
         return fail;
     }
 
+    // collect counters
 	rc = ixfileHandle.collectCounterValues(readPageCount1, writePageCount1, appendPageCount1);
 	if(rc != success)
     {

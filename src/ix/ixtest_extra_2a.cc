@@ -11,17 +11,18 @@ IndexManager *indexManager;
 
 int testCase_extra_2a(const string &indexFileName, const Attribute &attribute)
 {
-	// Extra test case for Undergrads. Mandatory for Grads.
-	// Checks whether deleting an entry after getNextEntry() is handled properly or not.
-	// Pass: 5 extra credit points for Undergrads if their code passes Extra Test 2a - 2d. 
-	//       No score deduction for Grads if their code passes Extra Test 2a - 2d.
-	// Fail: no extra points for Undergrads. Points will be deducted for Grads for each failing test case.
-	
+	// Checks whether deleting an entry after getNextEntry() for RANGE SCAN case is handled properly or not.
+	//
+	// Extra test case for Undergrads and Grads.
+	// Pass: 5 extra credit points for Undergrads if they pass all of 2a - 2d.
+	//       5 extra credit points for Grads if they pass all of 2a - 2d.
+	// Fail: no extra points for Undergrads and Grads.
+	//
     // Functions tested
     // 1. Create Index File
     // 2. OpenIndex File
     // 3. Insert entry
-    // 4. Scan entries, and delete entries
+    // 4. Scan entries - RANGE SCAN, and delete entries
     // 5. Scan close
     // 6. CloseIndex File
     // 7. DestroyIndex File
@@ -202,10 +203,10 @@ int main()
 
 	RC result = testCase_extra_2a(indexFileName, attrHeight);
     if (result == success) {
-    	cout << "IX_Test Extra Case 2a passed. Deleting an entry after getNextEntry() is properly handled." << endl;
+    	cout << "IX_Test Extra Case 2a passed. " << endl;
     	return success;
     } else {
-    	cout << "IX_Test Extra Case 2a failed." << endl;
+    	cout << "IX_Test Extra Case 2a failed. Deleting an entry after getNextEntry() for RANGE SCAN is not properly handled." << endl;
     	return fail;
     }
 

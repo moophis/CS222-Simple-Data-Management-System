@@ -19,7 +19,7 @@ int testCase_4A(const string &indexFileName, const Attribute &attribute)
     // 5. Scan close **
     // 6. Close Index File
     // NOTE: "**" signifies the new functions being tested in this test case.
-    cout << endl << "****In Test Case 4A****" << endl;
+    cout << endl << "****In Test Case 4a****" << endl;
 
     RID rid;
     RC rc;
@@ -58,7 +58,7 @@ int testCase_4A(const string &indexFileName, const Attribute &attribute)
     // insert entry
     for(unsigned i = 0; i <= numOfTuples; i++)
     {
-        key = i+1;//just in case somebody starts pageNum and recordId from 1
+        key = i+1; //just in case somebody starts pageNum and recordId from 1
         rid.pageNum = key;
         rid.slotNum = key+1;
 
@@ -88,7 +88,7 @@ int testCase_4A(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
     	if (rid.pageNum % 200 == 0) {
-        	cout << rid.pageNum << " " << rid.slotNum << endl;
+        	cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
     	}
         outRidPageNumSum += rid.pageNum;
     }

@@ -12,13 +12,13 @@ IndexManager *indexManager;
 int testCase_4B(const string &indexFileName, const Attribute &attribute)
 {
     // Functions tested
-    // 2. Open Index File
-    // 4. Scan entries NO_OP -- open**
-    // 5. Scan close **
-    // 6. Close Index File
-    // 7. Destroy Index File
+    // 1. Open Index File
+    // 2. Scan entries NO_OP -- open**
+    // 3. Scan close **
+    // 4. Close Index File
+    // 5. Destroy Index File
     // NOTE: "**" signifies the new functions being tested in this test case.
-    cout << endl << "****In Test Case 4B****" << endl;
+    cout << endl << "****In Test Case 4b****" << endl;
 
     RID rid;
     RC rc;
@@ -68,7 +68,7 @@ int testCase_4B(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
         if (rid.pageNum % 200 == 0) {
-        	cout << rid.pageNum << " " << rid.slotNum << endl;
+        	cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
     	}
         outRidPageNumSum += rid.pageNum;
     }

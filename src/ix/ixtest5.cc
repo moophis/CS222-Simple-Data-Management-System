@@ -107,7 +107,7 @@ int testCase_5(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
     	if (rid.pageNum % 100 == 0) {
-	        cout << rid.pageNum << " " << rid.slotNum << endl;
+	        cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
     	}
         if (rid.pageNum < 501 || rid.slotNum < 502)
         {

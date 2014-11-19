@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <utility>
+#include <functional>
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -24,9 +25,10 @@ enum {
     ERR_BAD_PAGE            = -302,     // error: bad page data
     ERR_OUT_OF_BOUND        = -303,     // error: index out of bound
     ERR_METADATA_MISSING    = -304,     // error: cannot find metadata
-    ERR_NO_SPACE            = -305,     // error: page doesn't have enough space
-    ERR_ENTRY_NOT_FOUND     = -306,     // error: cannot find the entry
-    ERR_DUPLICATE_ENTRY     = -307,     // error: duplicate entry found in the same page
+    ERR_METADATA_ERROR      = -305,      // error: metadata error
+    ERR_NO_SPACE            = -306,     // error: page doesn't have enough space
+    ERR_ENTRY_NOT_FOUND     = -307,     // error: cannot find the entry
+    ERR_DUPLICATE_ENTRY     = -308,     // error: duplicate entry found in the same page
 };
 
 class IX_ScanIterator;
@@ -127,13 +129,17 @@ class IndexManager {
 
   // Redistributed entries within a bucket chain (used when there is at least one emtpy page)
   // Check whether the bucket chain is empty.
-  RC rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket, vector<DataPage *> &cache, bool &emptyBucket);
+  RC rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
+          vector<DataPage *> &cache, bool &emptyBucket, MetadataPage &metadata);
 
   // Grow primary page(s) until the file can hold up to the page of #pageNum
   RC growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType);
 
   // Find the bucket number according to the key and current state
   unsigned calcBucketNumber(KeyValue &keyValue, const Attribute &attribute, MetadataPage &metadata);
+
+  // Print entries of each page
+  RC printEntries(DataPage *page);
 };
 
 // Define (immutable) key value type (Int, Real, Varchar)
@@ -259,6 +265,24 @@ public:
         }
     }
 
+    // Hash code of the key value
+    unsigned hashCode() {
+        switch (_keyType) {
+        case TypeInt:
+            std::hash<int> intHash;
+            return intHash(_int);
+        case TypeReal:
+            std::hash<float> realHash;
+            return realHash(_float);
+        case TypeVarChar:
+            std::hash<string> varCharHash;
+            return varCharHash(_varchar);
+        default:
+            __trace();
+            return 0;
+        }
+    }
+
     // Comparison function
     // return 0 if equal, 1 if this > that, -1 if this < that
     int compare(KeyValue &that) {
@@ -304,9 +328,6 @@ public:
     ~IXFileHandle();                            // Destructor
 
 private:
-    unsigned _readPageCounter;
-    unsigned _writePageCounter;
-    unsigned _appendPageCounter;
     FileHandle _primaryHandle;
     FileHandle _overflowHandle;
 };
@@ -369,6 +390,7 @@ private:
     unsigned _entryCount;       // total count of entries in the index
     unsigned _primaryPageCount; // total count of primary pages (current level pages + new split pages in this level)
     unsigned _overflowPageCount; // total count of overflow pages (including lazily deleted ones)
+    unsigned _delOverflowPageCount; // # of deleted overflow page count
     unsigned _currentBucketCount;  // the # of current buckets (primary pages)
     unsigned _nextSplitBucket;     // the next page to be split
     unsigned _initialBucketCount;  // the initial # of bucket (power of 2)
@@ -396,6 +418,8 @@ public:
     void setPrimaryPageCount(unsigned primaryPageCount);
     unsigned getOverflowPageCount();
     void setOverflowPageCount(unsigned overflowPageCount);
+    unsigned getDelOverflowPageCount();
+    void setDelOverflowPageCount(unsigned delOverflowPageCount);
     unsigned getCurrentBucketCount();
     void setCurrentBucketCount(unsigned currentBucketCount);
     unsigned getNextSplitBucket();

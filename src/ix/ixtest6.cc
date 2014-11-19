@@ -15,7 +15,8 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
     // 1. Create Index File
     // 2. Open Index File
     // 3. Insert entry
-    // 4. Scan entries using LT_OP operator and checking if the values returned are correct. Returned values are part of two separate insertions **
+    // 4. Scan entries using LT_OP operator and checking if the values returned are correct.
+	//    Returned values are part of two separate insertions. **
     // 5. Scan close
     // 6. Close Index File
     // 7. Destroy Index File
@@ -114,7 +115,7 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
         if(rid.pageNum % 500 == 0)
-            cout << rid.pageNum << " " << rid.slotNum << endl;
+            cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
         if ((rid.pageNum > 2000 && rid.pageNum < 6000) || rid.pageNum >= 6500)
         {
             cout << "Wrong entries output...failure" << endl;

@@ -238,7 +238,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
 
     // Rearrange pages within a page once find an empty page
     bool emptyBucket = false;
-    rebalanceWithin(ixfileHandle, bucket, cachedPages, emptyBucket);
+    rebalanceWithin(ixfileHandle, bucket, cachedPages, emptyBucket, metadata);
 
     // Update metadata
     unsigned p = metadata.getNextSplitBucket();
@@ -258,7 +258,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         vector<DataPage *> cache;
         bucket = total - 1;
         loadBucketChain(cache, ixfileHandle, bucket, attribute.type);
-        rebalanceWithin(ixfileHandle, bucket, cache, emptyBucket);
+        rebalanceWithin(ixfileHandle, bucket, cache, emptyBucket, metadata);
     }
     metadata.setNextSplitBucket(p);
     metadata.setCurrentBucketCount(n);
@@ -272,12 +272,76 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
 
 unsigned IndexManager::hash(const Attribute &attribute, const void *key)
 {
-	return 0;
+    KeyValue keyVal(key, attribute.type);
+	return keyVal.hashCode();
 }
 
 RC IndexManager::printIndexEntriesInAPage(IXFileHandle &ixfileHandle, const Attribute &attribute, const unsigned &primaryPageNumber)
 {
-	return -1;
+    RC err;
+    MetadataPage metadata(ixfileHandle._overflowHandle);
+    unsigned total = metadata.getPrimaryPageCount();
+    unsigned entriesCount = 0;
+    if (primaryPageNumber >= total) {
+        return ERR_OUT_OF_BOUND;
+    }
+    vector<DataPage *> cachedPages;
+    loadBucketChain(cachedPages, ixfileHandle, primaryPageNumber, attribute.type);
+
+    // Print primary page first
+    DataPage *primary = cachedPages[0];
+    entriesCount += primary->getEntriesCount();
+    cout << "Primary Page No. " << primary->getPageNum() << endl;
+    if ((err = printEntries(primary)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
+
+    // Print overflow pages
+    bool lastPrimary = true;
+    unsigned lastPage = primary->getPageNum();
+    for (unsigned i = 1; i < cachedPages.size(); i++) {
+        DataPage *overflow = cachedPages[i];
+        cout << "Overflow Page No. " << overflow->getPageNum() << " lined to ";
+        if (lastPrimary) {
+            cout << "primary page " << lastPage << endl;
+            lastPrimary = false;
+        } else {
+            cout << "overflow page " << lastPage << endl;
+        }
+        lastPage = overflow->getPageNum();
+        if ((err = printEntries(overflow)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+    }
+
+    return SUCCESSFUL;
+}
+
+RC IndexManager::printEntries(DataPage *page) {
+    RC err;
+
+    cout << "\ta. # of entries: " << page->getEntriesCount() << endl;
+    cout << "\tb. entries: ";
+    for (unsigned i = 0; i < page->getEntriesCount(); i++) {
+        KeyValue key;
+        RID rid;
+        if ((err = page->keyAt(i, key)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+        if ((err = page->ridAt(i, rid)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+
+        cout << "[" << key.toString() << "|" << rid.pageNum << ","
+             << rid.slotNum << "] ";
+    }
+    cout << endl;
+
+    return SUCCESSFUL;
 }
 
 RC IndexManager::getNumberOfPrimaryPages(IXFileHandle &ixfileHandle, unsigned &numberOfPrimaryPages)
@@ -290,7 +354,15 @@ RC IndexManager::getNumberOfPrimaryPages(IXFileHandle &ixfileHandle, unsigned &n
 
 RC IndexManager::getNumberOfAllPages(IXFileHandle &ixfileHandle, unsigned &numberOfAllPages)
 {
-	return -1;
+    MetadataPage metadata(ixfileHandle._overflowHandle);
+    numberOfAllPages = metadata.getPrimaryPageCount();
+    if (metadata.getOverflowPageCount() < metadata.getDelOverflowPageCount()) {
+        return ERR_METADATA_ERROR;
+    }
+    numberOfAllPages += metadata.getOverflowPageCount() - metadata.getDelOverflowPageCount();
+    numberOfAllPages++;     // metadata page
+
+	return SUCCESSFUL;
 }
 
 
@@ -416,6 +488,10 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
     }
 
     // Discard old cache using new cache instead
+    // Count the deleted overflow pages
+    unsigned deleted = metadata.getDelOverflowPageCount();
+    deleted += oldCache.size() - updatedCache.size();
+    metadata.setDelOverflowPageCount(deleted);
     flushBucketChain(oldCache);
     oldCache = updatedCache;
 
@@ -423,7 +499,9 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
 }
 
 RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
-            vector<DataPage *> &cache, bool &emptyBucket) {
+            vector<DataPage *> &cache, bool &emptyBucket, MetadataPage &metadata) {
+    unsigned deleted = 0;
+
     emptyBucket = false;
     if (cache.size() == 1 && cache[0]->getEntriesCount() == 0) {
         emptyBucket = true;
@@ -436,16 +514,19 @@ RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
             before->_rids = after->_rids;
             before->setNextPageNum(after->getNextPageNum());
             after->discard();
+            deleted++;
         } else {
             for (size_t i = 1; i < cache.size(); i++) {
                 if (cache[i]->getEntriesCount() == 0) {
                     cache[i-1]->setNextPageNum(cache[i]->getNextPageNum());
                     cache[i]->discard();
+                    deleted++;
                     break;
                 }
             }
         }
     }
+    metadata.setDelOverflowPageCount(metadata.getDelOverflowPageCount() + deleted);
 
     return SUCCESSFUL;
 }
@@ -496,7 +577,6 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 
 RC IX_ScanIterator::close()
 {
-    _ixm->flushBucketChain(_curBucket);
     this->_active = false;
 	return SUCCESSFUL;
 }
@@ -526,11 +606,64 @@ RC IX_ScanIterator::getNextHashMatch(RID &rid, void *key) {
         }
     }
 
+    _ixm->flushBucketChain(_curBucket);
+    _curBucket.clear();
     return IX_EOF;
 }
 
 RC IX_ScanIterator::getNextRangeMatch(RID &rid, void *key) {
-    return -1;
+    while (_curBucketNum < _totalBucketNum) {
+        if (_curBucket.empty()) {
+            _ixm->loadBucketChain(_curBucket, _ixFileHandle, _curBucketNum, _keyType);
+        }
+
+        while (_curPageIndex < _curBucket.size()) {
+            DataPage *page = _curBucket[_curPageIndex];
+            unsigned count = page->getEntriesCount();
+            bool found = false;
+            for (; _curRangeIndex < count && !found; _curRangeIndex++) {
+                KeyValue keyVal;
+                // Fetch the key
+                if (page->keyAt(_curRangeIndex, keyVal) != SUCCESSFUL) {
+                    __trace();
+                    return IX_EOF;
+                }
+                // Compare with lower bound
+                if (_hasLowerBound) {
+                    if ((_lowInclusive && _lowKey.compare(keyVal) > 0) ||
+                            (!_lowInclusive && _lowKey.compare(keyVal) >= 0)) {
+                        continue;
+                    }
+                }
+                // Compare with upper bound
+                if (_hasUpperBound) {
+                    if ((_highInclusive && _highKey.compare(keyVal) < 0) ||
+                            (!_highInclusive && _highKey.compare(keyVal) <= 0)) {
+                        continue;
+                    }
+                }
+                // OK now the key is within the range
+                keyVal.getRaw(key);
+                if (page->ridAt(_curRangeIndex, rid) != SUCCESSFUL) {
+                    // error should not happen
+                    __trace();
+                    return IX_EOF;
+                }
+                found = true;
+            }
+            if (found) {
+                return SUCCESSFUL;
+            } else {
+                _curPageIndex++;
+            }
+        }
+        _ixm->flushBucketChain(_curBucket);
+        _curBucket.clear();
+        _curBucketNum++;
+        _curPageIndex = 0;
+    }
+
+    return IX_EOF;
 }
 
 IXFileHandle::IXFileHandle()
@@ -543,7 +676,17 @@ IXFileHandle::~IXFileHandle()
 
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount)
 {
-	return -1;
+    unsigned rc = 0, wc = 0, ac = 0;
+    readPageCount = writePageCount = appendPageCount = 0;
+    _primaryHandle.collectCounterValues(rc, wc, ac);
+    readPageCount += rc;
+    writePageCount += wc;
+    appendPageCount += ac;
+    _overflowHandle.collectCounterValues(rc, wc, ac);
+    readPageCount += rc;
+    writePageCount += wc;
+    appendPageCount += ac;
+    return SUCCESSFUL;
 }
 
 void IX_PrintError (RC rc)
@@ -597,6 +740,8 @@ RC MetadataPage::load() {
     offset += sizeof(int);
     memcpy((char *) &_overflowPageCount, page + offset, sizeof(int));
     offset += sizeof(int);
+    memcpy((char *) &_delOverflowPageCount, page + offset, sizeof(int));
+    offset += sizeof(int);
     memcpy((char *) &_currentBucketCount, page + offset, sizeof(int));
     offset += sizeof(int);
     memcpy((char *) &_nextSplitBucket, page + offset, sizeof(int));
@@ -617,6 +762,8 @@ RC MetadataPage::flush() {
     memcpy(page + offset, (char *) &_primaryPageCount, sizeof(int));
     offset += sizeof(int);
     memcpy(page + offset, (char *) &_overflowPageCount, sizeof(int));
+    offset += sizeof(int);
+    memcpy(page + offset, (char *) &_delOverflowPageCount, sizeof(int));
     offset += sizeof(int);
     memcpy(page + offset, (char *) &_currentBucketCount, sizeof(int));
     offset += sizeof(int);
@@ -658,6 +805,15 @@ unsigned MetadataPage::getOverflowPageCount() {
 void MetadataPage::setOverflowPageCount(unsigned overflowPageCount) {
     _dirty = true;
     _overflowPageCount = overflowPageCount;
+}
+
+unsigned MetadataPage::getDelOverflowPageCount() {
+    return _delOverflowPageCount;
+}
+
+void MetadataPage::setDelOverflowPageCount(unsigned delOverflowPageCount) {
+    _dirty = true;
+    _delOverflowPageCount = delOverflowPageCount;
 }
 
 unsigned MetadataPage::getCurrentBucketCount() {

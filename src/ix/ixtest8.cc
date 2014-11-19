@@ -111,7 +111,7 @@ int testCase_8(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
         if(count % 1000 == 0)
-            cout << rid.pageNum << " " << rid.slotNum << endl;
+            cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
         count++;
     }
     cout << "Number of scanned entries: " << count << endl;
@@ -180,7 +180,7 @@ int main()
     	cout << "IX_Test Case 8 passed" << endl;
     	return success;
     } else {
-    	cout << "IX_Test Case 8 failed. Duplicated entries were not handled properly." << endl;
+    	cout << "IX_Test Case 8 failed. Duplicated entries are not handled properly." << endl;
     	return fail;
     }
 

@@ -54,11 +54,11 @@ int testCase_3(const string &indexFileName, const Attribute &attribute)
         }
     }
 
-	// Get NumberOfPages
+	// Get number of primary pages
     rc = indexManager->getNumberOfPrimaryPages(ixfileHandle, numberOfPagesFromFunction);
     if(rc != success)
     {
-    	cout << "printIndexEntriesInAPage() failed." << endl;
+    	cout << "getNumberOfPrimaryPages() failed." << endl;
     	indexManager->closeFile(ixfileHandle);
 		return fail;
     }

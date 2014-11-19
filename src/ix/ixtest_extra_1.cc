@@ -11,9 +11,10 @@ IndexManager *indexManager;
 
 int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
 {
+	// Checks whether VARCHAR type is handled properly or not.
+    //
 	// Extra test case for Undergrad. Mandatory for Grad.
-	// Checks whether Varchar type is handled properly or not.
-	// Pass: 5 points for Undergrad. No score deduction for Grad.
+	// Pass: 5 extra points for Undergrad. No score deduction for Grad.
 	// Fail: no extra points for Undergrad. Points will be deducted for Grad.
 	//
     // Functions Tested:
@@ -107,7 +108,7 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
     //iterate
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
-        cout << rid.pageNum << " " << rid.slotNum << endl;
+        cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
     }
     cout << endl;
 
@@ -124,7 +125,7 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    //close index file file
+    //close index file
     rc = indexManager->closeFile(ixfileHandle);
     if(rc == success)
     {
@@ -137,7 +138,7 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
-    //destroy index file file
+    //destroy index file
     rc = indexManager->destroyFile(indexFileName);
     if(rc == success)
     {
@@ -159,7 +160,6 @@ int main()
     //Global Initializations
     indexManager = IndexManager::instance();
 
-	const string indexHeightFileName = "Height_idx";
 	const string indexEmpNameFileName = "EmpName_idx";
 
 	Attribute attrEmpName;
@@ -169,10 +169,10 @@ int main()
 
 	RC result = testCase_extra_1(indexEmpNameFileName, attrEmpName);
     if (result == success) {
-    	cout << "IX_Test Extra Case 1 passed. VarChar type are handled properly." << endl;
+    	cout << "IX_Test Extra Case 1 passed." << endl;
     	return success;
     } else {
-    	cout << "IX_Test Extra Case 1 failed." << endl;
+    	cout << "IX_Test Extra Case 1 failed. VarChar type is not handled properly." << endl;
     	return fail;
     }
 

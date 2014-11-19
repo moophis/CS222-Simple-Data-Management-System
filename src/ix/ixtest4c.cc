@@ -20,7 +20,7 @@ int testCase_4C(const string &indexFileName, const Attribute &attribute)
     // 6. Close Index File
     // 7. Destroy Index File
     // NOTE: "**" signifies the new functions being tested in this test case.
-    cout << endl << "****In Test Case 4C****" << endl;
+    cout << endl << "****In Test Case 4c****" << endl;
 
     RID rid;
     RC rc;
@@ -88,7 +88,7 @@ int testCase_4C(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
     	if (rid.pageNum % 20 == 0) {
-        	cout << rid.pageNum << " " << rid.slotNum << endl;
+        	cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
     	}
         outRidPageNumSum += rid.pageNum;
     }
@@ -152,10 +152,10 @@ int main()
 
 	RC result = testCase_4C(indexFileName, attrAge);
     if (result == success) {
-    	cout << "IX_Test Case 4C passed" << endl;
+    	cout << "IX_Test Case 4c passed" << endl;
     	return success;
     } else {
-    	cout << "IX_Test Case 4C failed" << endl;
+    	cout << "IX_Test Case 4c failed" << endl;
     	return fail;
     }
 

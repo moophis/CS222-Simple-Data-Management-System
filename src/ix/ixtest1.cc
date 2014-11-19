@@ -50,11 +50,12 @@ int testCase_1(const string &indexFileName)
         return fail;
     }
 
+    // Get number of all pages
     rc = indexManager->getNumberOfAllPages(ixfileHandle, numberOfPagesFromFunction);
     if(rc == success)
     {
         if (numberOfPagesFromFunction < numberOfPages) {
-        	cout << "Number of initially constructed pages is not correct." << endl;
+        	cout << "The number of initially constructed pages is not correct." << endl;
         	return fail;
         }
     }
@@ -64,12 +65,13 @@ int testCase_1(const string &indexFileName)
         return fail;
     }
     
+    // Get number of primary pages
     numberOfPagesFromFunction = 0;
     rc = indexManager->getNumberOfPrimaryPages(ixfileHandle, numberOfPagesFromFunction);
     if(rc == success)
     {
         if (numberOfPagesFromFunction != numberOfPages) {
-        	cout << "Number of initially constructed pages is not correct." << endl;
+        	cout << "The number of initially constructed pages is not correct." << endl;
         	return fail;
         }
     }
@@ -79,7 +81,7 @@ int testCase_1(const string &indexFileName)
         return fail;
     }	
 	
-    // create duplicate index file
+    // Try to create duplicate index file
     rc = indexManager->createFile(indexFileName, numberOfPages);
     if(rc != success)
     {
