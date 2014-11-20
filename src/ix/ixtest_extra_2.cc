@@ -17,7 +17,7 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
 	// Pass: 5 extra credit points for Undergrads.
 	//       No score deduction for Grads.
 	// Fail: no extra points for Undergrads. Points will be deducted for Grads.
-	
+
     // Functions tested
     // 1. Create Index File
     // 2. OpenIndex File
@@ -80,6 +80,16 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
         }
     }
 
+    /*
+     * New
+     */
+    unsigned count = 0;
+    indexManager->getNumberOfPrimaryPages(ixfileHandle, count);
+    for (unsigned i = 0; i < count; i++) {
+        cout << "[BUCKET " << i << "] -->" << endl;
+        indexManager->printIndexEntriesInAPage(ixfileHandle, attribute, i);
+    }
+
     // scan - EXACT MATCH
     rc = indexManager->scan(ixfileHandle, attribute, &compVal, &compVal, true, true, ix_ScanIterator);
     if(rc == success)
@@ -104,6 +114,7 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
         if(rc != success)
         {
             cout << "Failed deleting entry in Scan..." << endl;
+            cout << "key: " << key << " RID: " << rid.pageNum << " " << rid.slotNum << endl;
         	ix_ScanIterator.close();
         	return fail;
         }
@@ -150,7 +161,7 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
         	ix_ScanIterator.close();
         	return fail;
         }
-        
+
     }
 
     if (testFailed) {

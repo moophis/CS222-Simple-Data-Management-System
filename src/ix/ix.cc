@@ -34,28 +34,40 @@ RC IndexManager::createFile(const string &fileName, const unsigned &numberOfPage
 
     // Initial bucket should be power of 2
     if (numberOfPages & (numberOfPages - 1)) {
+        __trace();
         return ERR_INV_INIT_BUCKET;
     }
 
     if ((err = _pfm->createFile(primary.c_str())) != SUCCESSFUL) {
+        __trace();
         return err;
     }
     if ((err = _pfm->createFile(overflow.c_str())) != SUCCESSFUL) {
+        __trace();
         return err;
     }
 
     FileHandle h2;
     if ((err = _pfm->openFile(overflow.c_str(), h2)) != SUCCESSFUL) {
+        __trace();
         return err;
     }
 
+    __trace();
     MetadataPage metadataPage(h2);
     metadataPage.initialize(numberOfPages);
 
-    if ((err = _pfm->closeFile(h2)) != SUCCESSFUL) {
+    if ((err = metadataPage.flush()) != SUCCESSFUL) {
+        __trace();
         return err;
     }
 
+    if ((err = _pfm->closeFile(h2)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
+
+    __trace();
 	return SUCCESSFUL;
 }
 
@@ -117,18 +129,23 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
 
     // Count the bucket number
     unsigned bucket = calcBucketNumber(keyValue, attribute, metadata);
+//    __trace();
+//    cout << "bucket number: " << bucket << endl;
 
     // Check if the current bucket has been initialized, if not grow the bucket
     if (ixfileHandle._primaryHandle.getNumberOfPages() == 0) {
         if ((err = growToFit(ixfileHandle, metadata.getPrimaryPageCount(), attribute.type)) != SUCCESSFUL) {
+            __trace();
             return err;
         }
     }
 
+//    __trace();
     // Load all pages within this bucket
     vector<DataPage *> cachedPages;
     loadBucketChain(cachedPages, ixfileHandle, bucket, attribute.type);
 
+//    __trace();
     // Check whether the same <key, RID> pair already exists in the bucket
     for (size_t i = 0; i < cachedPages.size(); i++) {
         DataPage *curPage = cachedPages[i];
@@ -137,35 +154,25 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
         }
     }
 
-    // Check whether we need insert a new overflow page
+//    __trace();
+    // Check whether we need to insert a new overflow page
     // If not, just insert the entry
     bool inserted = false;
-    for (size_t i = 0; i < cachedPages.size(); i++) {
-        DataPage *curPage = cachedPages[i];
-        if (curPage->hasSpace(keyValue)) {
-            if ((err = curPage->insert(keyValue, rid)) != SUCCESSFUL) {
-                return err;
-            } else {
-                inserted = true;
-                break;
-            }
-        }
+    if ((err = insertInternal(cachedPages, keyValue, rid, inserted)) != SUCCESSFUL) {
+        __trace();
+        return err;
     }
+
+//    cout << "Inserted in existing pages? " << inserted << endl;
     if (!inserted) {
-        // Add a new page.
-        // Note that overflow page # starts from 1.
-        unsigned overflowPageCount = metadata.getOverflowPageCount();
-        DataPage *newPage = new DataPage(ixfileHandle._overflowHandle, OVERFLOW_PAGE,
-                attribute.type, ++overflowPageCount, true);
-        cachedPages.back()->setPageNum(overflowPageCount);
-        cachedPages.push_back(newPage);
-        metadata.setOverflowPageCount(overflowPageCount);
-        if ((err = newPage->insert(keyValue, rid)) != SUCCESSFUL) {
-            return err;
-        }
+        // Debug
+//        cout << "Last Page: PageType: " << cachedPages.back()->getPageType() << ", Num: "
+//             << cachedPages.back()->getPageNum() << ", Next: " << cachedPages.back()->getNextPageNum() << endl;
+//        cout << "Bucket # to insert: " << bucket << endl;
 
         // Split bucket
-        // 1. Update metadata and reserve new split bucket
+        // Update metadata
+        vector<DataPage *> oldCache;
         vector<DataPage *> newCache;
         unsigned p = metadata.getNextSplitBucket();
         unsigned n = metadata.getCurrentBucketCount();
@@ -175,25 +182,92 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
             p = 0;
             n = n << 1;
         }
-        DataPage *newBucketPage = new DataPage(ixfileHandle._primaryHandle, PRIMARY_PAGE,
-                attribute.type, total++, true);
-        newCache.push_back(newBucketPage);
+        total++;
         metadata.setNextSplitBucket(p);
         metadata.setCurrentBucketCount(n);
         metadata.setPrimaryPageCount(total);
-        // 2. Redistribute entries between two buckets
-        rebalanceBetween(ixfileHandle, from, cachedPages, to, newCache, metadata, attribute);
 
-        // flush new bucket
-        flushBucketChain(newCache);
+        // Load bucket to be split and reserve new spill bucket.
+        loadBucketChain(oldCache, ixfileHandle, from, attribute.type);
+        DataPage *newBucketPage = new DataPage(ixfileHandle._primaryHandle, PRIMARY_PAGE,
+                attribute.type, total - 1, true);
+        newCache.push_back(newBucketPage);
+
+        // Redistribute entries between two buckets
+        if ((err = rebalanceBetween(ixfileHandle, from, oldCache, to,
+                newCache, metadata, attribute)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+
+        // Check whether the bucket we split is the one we should insert entry into.
+        if (from != bucket) {
+            if ((err = appendInternal(cachedPages, keyValue, rid, metadata,
+                    ixfileHandle, attribute)) != SUCCESSFUL) {
+                __trace();
+                return err;
+            }
+        } else {
+            // Discard previous bucket cache
+            for (unsigned i = 0; i < cachedPages.size(); i++) {
+                cachedPages[i]->discard();
+            }
+
+            // Recalculate bucket number according to updated metadata
+            unsigned bkt = calcBucketNumber(keyValue, attribute, metadata);
+//            cout << "New bucket # to insert: " << bkt << endl;
+            if (bkt == from) {
+//                __trace();
+                if ((err = insertIntoBucket(oldCache, keyValue, rid, metadata,
+                        ixfileHandle, attribute)) != SUCCESSFUL) {
+                    __trace();
+                    return err;
+                }
+//                __trace();
+            } else if (bkt == to) {
+//                __trace();
+                if ((err = insertIntoBucket(newCache, keyValue, rid, metadata,
+                        ixfileHandle, attribute)) != SUCCESSFUL) {
+                    __trace();
+                    return err;
+                }
+//                __trace();
+            } else {
+                __trace();
+                metadata.printMetadata();
+                return ERR_BAD_PAGE;
+            }
+        }
+
+//        __trace();
+        // flush split and new bucket
+        if ((err = flushBucketChain(oldCache)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+//        __trace();
+        if ((err = flushBucketChain(newCache)) != SUCCESSFUL) {
+            __trace();
+            metadata.printMetadata();
+            return err;
+        }
+//        __trace();
     }
 
-    // flush split bucket
-    flushBucketChain(cachedPages);
+    if ((err = flushBucketChain(cachedPages)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
 
+//    __trace();
     // Update total entries count
     metadata.setEntryCount(metadata.getEntryCount() + 1);
 
+//    __trace();
+//    cout << "Inserted: " << keyValue.toString() << endl;
+//    metadata.flush();
+//    __trace();
+//    printIndexEntriesInAPage(ixfileHandle, attribute, bucket);
     return SUCCESSFUL;
 }
 
@@ -204,6 +278,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     KeyValue keyValue(key, attribute.type);
     MetadataPage metadata(ixfileHandle._overflowHandle);
     if (!metadata.isInitialized()) {
+        __trace();
         return ERR_METADATA_MISSING;
     }
 
@@ -213,6 +288,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     // Check if the current bucket has been initialized, if not grow the bucket
     if (ixfileHandle._primaryHandle.getNumberOfPages() == 0) {
         if ((err = growToFit(ixfileHandle, metadata.getPrimaryPageCount(), attribute.type)) != SUCCESSFUL) {
+            __trace();
             return err;
         }
     }
@@ -228,15 +304,17 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
             break;
         }
         if (err != ERR_ENTRY_NOT_FOUND) {
+            __trace();
             return err;
         }
     }
 
     if (!deleted) {
+        __trace();
         return ERR_ENTRY_NOT_FOUND;
     }
 
-    // Rearrange pages within a page once find an empty page
+    // Rearrange pages within a page once finding an empty page
     bool emptyBucket = false;
     rebalanceWithin(ixfileHandle, bucket, cachedPages, emptyBucket, metadata);
 
@@ -246,6 +324,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     unsigned total = metadata.getPrimaryPageCount();
     unsigned init = metadata.getInitialBucketCount();
     while (emptyBucket && bucket == total - 1 && total > init) {
+        __trace();
         // Shrink the bucket
         total--;
         if (p == 0) {
@@ -263,9 +342,13 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     metadata.setNextSplitBucket(p);
     metadata.setCurrentBucketCount(n);
     metadata.setPrimaryPageCount(total);
+    metadata.setEntryCount(metadata.getEntryCount() - 1);
 
     // flush bucket
-    flushBucketChain(cachedPages);
+    if ((err = flushBucketChain(cachedPages)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
 
     return SUCCESSFUL;
 }
@@ -273,24 +356,26 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
 unsigned IndexManager::hash(const Attribute &attribute, const void *key)
 {
     KeyValue keyVal(key, attribute.type);
-	return keyVal.hashCode();
+    return keyVal.hashCode();
 }
 
 RC IndexManager::printIndexEntriesInAPage(IXFileHandle &ixfileHandle, const Attribute &attribute, const unsigned &primaryPageNumber)
 {
+//    __trace();
     RC err;
     MetadataPage metadata(ixfileHandle._overflowHandle);
     unsigned total = metadata.getPrimaryPageCount();
-    unsigned entriesCount = 0;
     if (primaryPageNumber >= total) {
         return ERR_OUT_OF_BOUND;
     }
     vector<DataPage *> cachedPages;
     loadBucketChain(cachedPages, ixfileHandle, primaryPageNumber, attribute.type);
 
-    // Print primary page first
+    // Total entries
+    cout << "Number of total entries: " << metadata.getEntryCount() << endl;
+
+    // Print primary page
     DataPage *primary = cachedPages[0];
-    entriesCount += primary->getEntriesCount();
     cout << "Primary Page No. " << primary->getPageNum() << endl;
     if ((err = printEntries(primary)) != SUCCESSFUL) {
         __trace();
@@ -357,6 +442,9 @@ RC IndexManager::getNumberOfAllPages(IXFileHandle &ixfileHandle, unsigned &numbe
     MetadataPage metadata(ixfileHandle._overflowHandle);
     numberOfAllPages = metadata.getPrimaryPageCount();
     if (metadata.getOverflowPageCount() < metadata.getDelOverflowPageCount()) {
+        __trace();
+        cout << "Overflow page #: " << metadata.getOverflowPageCount()
+             << " Deleted #: " << metadata.getDelOverflowPageCount() << endl;
         return ERR_METADATA_ERROR;
     }
     numberOfAllPages += metadata.getOverflowPageCount() - metadata.getDelOverflowPageCount();
@@ -399,12 +487,12 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
         ix_ScanIterator._lowKey = KeyValue(lowKey, attribute.type);
     }
     if (ix_ScanIterator._hasUpperBound) {
-        ix_ScanIterator._highKey = KeyValue(lowKey, attribute.type);
+        ix_ScanIterator._highKey = KeyValue(highKey, attribute.type);
     }
     ix_ScanIterator._keyType = attribute.type;
     if ((lowKeyInclusive == highKeyInclusive) && ix_ScanIterator._hasLowerBound
             && ix_ScanIterator._hasUpperBound
-            && ix_ScanIterator._lowKey.compare(ix_ScanIterator._highKey)) {
+            && ix_ScanIterator._lowKey.compare(ix_ScanIterator._highKey) == 0) {
         ix_ScanIterator._scanType = HASH_SCAN;
         ix_ScanIterator._curBucketNum = calcBucketNumber(ix_ScanIterator._lowKey, attribute, metadata);
         ix_ScanIterator._curPageIndex = 0;
@@ -423,27 +511,50 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
 
 void IndexManager::loadBucketChain(vector<DataPage *> &buf, IXFileHandle &ixfileHandle,
                    unsigned bucketNum, const AttrType &keyType) {
+//    __trace();
+//    cout << "Load bucket: " << bucketNum << endl;
     DataPage *primary = new DataPage(ixfileHandle._primaryHandle, PRIMARY_PAGE,
                 keyType, bucketNum, false);
     buf.push_back(primary);
+//    cout << "\tPushed a primary page: pageNum: " << bucketNum << endl;
     DataPage *curPage = primary;
-    unsigned nextPageNum;
+    unsigned nextPageNum = PAGE_END;
     while ((nextPageNum = curPage->getNextPageNum()) != PAGE_END) {
+//        cout << "\tPushed an overflow page: pageNum: " << nextPageNum;
         DataPage *overflow = new DataPage(ixfileHandle._overflowHandle, OVERFLOW_PAGE,
                     keyType, nextPageNum, false);
         buf.push_back(overflow);
         curPage = overflow;
+//        cout << " (Pushed)" << endl;
     }
 }
 
-void IndexManager::flushBucketChain(vector<DataPage *> &buf) {
+RC IndexManager::flushBucketChain(vector<DataPage *> &buf) {
+//    __trace();
+//    cout << "We have " << buf.size() << " page(s) to flush" << endl;
+    RC err;
     for (size_t i = 0; i < buf.size(); i++) {
+//        buf[i]->printMetadata();
+        if ((err = buf[i]->flush()) != SUCCESSFUL) {
+            __trace();
+            cout << "Error: flush page (i = " << i << " of " << buf.size() << ")" << endl;
+            cout << "Dump the whole bucket: " << endl;
+            for (size_t j = 0; j < buf.size(); j++) {
+                cout << "*** i = " << j << endl;
+                buf[j]->printMetadata();
+            }
+            return err;
+        }
         delete buf[i];
     }
+    return SUCCESSFUL;
 }
 
 RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket, vector<DataPage *> &oldCache,
           unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata, const Attribute &attribute) {
+//    __trace();
+//    cout << "Old bucket #" << oldBucket << ", newBucket #" << newBucket << endl;
+    RC err;
     unsigned cur = 0;
     vector<DataPage *> updatedCache;
 
@@ -451,11 +562,13 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
     DataPage *op = oldCache[cur];
     AttrType keyType = op->getKeyType();
     updatedCache.push_back(new DataPage(ixfileHandle._primaryHandle, PRIMARY_PAGE, keyType,
-                        op->getPageNum(), true));
+            op->getPageNum(), true));
 
     // Redistribute data
     for (size_t i = 0; i < oldCache.size(); i++) {
         DataPage *curPage = oldCache[i];
+//        cout << "PageType: " << curPage->getPageType() << ", pageNum: "
+//             << curPage->getPageNum() << endl;
         unsigned entriesCount = curPage->getEntriesCount();
         for (unsigned j = 0; j < entriesCount; j++) {
             KeyValue key;
@@ -463,6 +576,9 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
             curPage->keyAt(j, key);
             curPage->ridAt(j, rid);
             unsigned bucket = calcBucketNumber(key, attribute, metadata);
+//            cout << "key: " << key.toString() << ", hash: " << key.hashCode() << " new: " << bucket << endl;
+//            cout << " ** [" << key.toString() << "|" << rid.pageNum
+//                 << "," << rid.slotNum << "] redistribute to " << bucket << endl;
             if (bucket == oldBucket) {
                 if (!updatedCache[cur]->hasSpace(key)) {
                     DataPage *dp = oldCache[++cur];   // Index should not be out of bound here
@@ -474,13 +590,19 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
             } else if (bucket == newBucket) {
                 if (!newCache.back()->hasSpace(key)) {
                     unsigned overflowPageCount = metadata.getOverflowPageCount();
-                    newCache.push_back(new DataPage(ixfileHandle._overflowHandle, OVERFLOW_PAGE,
-                                keyType, ++overflowPageCount, true));
+                    DataPage *dp = new DataPage(ixfileHandle._overflowHandle, OVERFLOW_PAGE,
+                            keyType, ++overflowPageCount, true);
+                    newCache.back()->setNextPageNum(dp->getPageNum());
+                    newCache.push_back(dp);
                     metadata.setOverflowPageCount(overflowPageCount);
                 }
                 newCache.back()->insert(key, rid);
             } else {
                 __trace();
+                metadata.printMetadata();
+                cout << "New bucket: " << bucket << endl;
+                cout << "key: " << key.toString() << ", hash: " << key.hashCode() << endl;
+                curPage->printMetadata();
                 return ERR_BAD_PAGE;
             }
         }
@@ -492,9 +614,13 @@ RC IndexManager::rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket
     unsigned deleted = metadata.getDelOverflowPageCount();
     deleted += oldCache.size() - updatedCache.size();
     metadata.setDelOverflowPageCount(deleted);
-    flushBucketChain(oldCache);
+    if ((err = flushBucketChain(oldCache)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
     oldCache = updatedCache;
 
+//    __trace();
     return SUCCESSFUL;
 }
 
@@ -502,22 +628,35 @@ RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
             vector<DataPage *> &cache, bool &emptyBucket, MetadataPage &metadata) {
     unsigned deleted = 0;
 
-    emptyBucket = false;
-    if (cache.size() == 1 && cache[0]->getEntriesCount() == 0) {
-        emptyBucket = true;
+    // Check whether the bucket is empty
+    emptyBucket = isEmptyBucket(cache);
+    if (emptyBucket) {
+        __trace();
         return SUCCESSFUL;
     }
+
+    // Redistribute data
     if (cache.size() > 1) {
         DataPage *before = cache[0], *after = cache[1];
         if (before->getEntriesCount() == 0) {
+            __trace();
+//            cout << "Before rebalance: before->next: " << before->getNextPageNum()
+//                 << ", after->count: " << after->getEntriesCount() << endl;
+
             before->_keys = after->_keys;
             before->_rids = after->_rids;
             before->setNextPageNum(after->getNextPageNum());
+            before->setEntriesCount(after->getEntriesCount());
+            before->setEntriesSize(after->getEntriesSize());
             after->discard();
             deleted++;
+
+//            cout << "After rebalance: before->next: " << before->getNextPageNum()
+//                 << ", before->count: " << before->getEntriesCount() << endl;
         } else {
             for (size_t i = 1; i < cache.size(); i++) {
                 if (cache[i]->getEntriesCount() == 0) {
+                    __trace();
                     cache[i-1]->setNextPageNum(cache[i]->getNextPageNum());
                     cache[i]->discard();
                     deleted++;
@@ -531,10 +670,90 @@ RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
     return SUCCESSFUL;
 }
 
+RC IndexManager::insertInternal(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+          const RID &rid, bool &inserted) {
+    RC err;
+
+    inserted = false;
+    for (size_t i = 0; i < cachedPages.size(); i++) {
+        DataPage *curPage = cachedPages[i];
+//        cout << "+ i = " << i << " Cached Page #" << curPage->getPageNum() << endl;
+        if (curPage->hasSpace(keyValue)) {
+            if ((err = curPage->insert(keyValue, rid)) != SUCCESSFUL) {
+                return err;
+            } else {
+                inserted = true;
+                break;
+            }
+        }
+    }
+    return SUCCESSFUL;
+}
+
+RC IndexManager::appendInternal(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+        const RID &rid, MetadataPage &metadata, IXFileHandle &ixfileHandle,
+        const Attribute &attribute) {
+    RC err;
+    unsigned overflowPageCount = metadata.getOverflowPageCount();
+    DataPage *newPage = new DataPage(ixfileHandle._overflowHandle, OVERFLOW_PAGE,
+            attribute.type, ++overflowPageCount, true);
+
+    cachedPages.back()->setNextPageNum(overflowPageCount);
+    cachedPages.push_back(newPage);
+    metadata.setOverflowPageCount(overflowPageCount);
+    if ((err = newPage->insert(keyValue, rid)) != SUCCESSFUL) {
+        return err;
+    }
+
+    return SUCCESSFUL;
+}
+
+RC IndexManager::insertIntoBucket(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+          const RID &rid, MetadataPage &metadata, IXFileHandle &ixfileHandle,
+          const Attribute &attribute) {
+    RC err;
+
+    bool ins = false;
+    if ((err = insertInternal(cachedPages, keyValue, rid, ins)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
+    if (!ins) {
+        if ((err = appendInternal(cachedPages, keyValue, rid, metadata,
+                ixfileHandle, attribute)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+    }
+
+    return SUCCESSFUL;
+}
+
+bool IndexManager::isEmptyBucket(vector<DataPage *> &cache) {
+    for (unsigned i = 0; i < cache.size(); i++) {
+        if (cache[i]->getEntriesCount() != 0) {
+            return false;
+        }
+        if (cache[i]->getNextPageNum() == PAGE_END) {
+            return true;;
+        }
+    }
+    __trace();   // Not reach (pages should end with PAGE_END)
+    return true;
+}
+
 RC IndexManager::growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType) {
     unsigned start = ixfileHandle._primaryHandle.getNumberOfPages();
+//    __trace();
+//    cout << "start: " << start << " pageNum: " << pageNum << endl;
+    RC err;
     for (unsigned i = start; i < pageNum; i++) {
+//        cout << "Initializing " << i << endl;
         DataPage dp(ixfileHandle._primaryHandle, PRIMARY_PAGE, (AttrType &) keyType, i, true);
+        if ((err = dp.flush()) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
     }
 
     return SUCCESSFUL;
@@ -582,6 +801,7 @@ RC IX_ScanIterator::close()
 }
 
 RC IX_ScanIterator::getNextHashMatch(RID &rid, void *key) {
+    RC err;
     if (_curBucket.empty()) {
         _ixm->loadBucketChain(_curBucket, _ixFileHandle, _curBucketNum, _keyType);
     }
@@ -606,12 +826,17 @@ RC IX_ScanIterator::getNextHashMatch(RID &rid, void *key) {
         }
     }
 
-    _ixm->flushBucketChain(_curBucket);
+    if ((err = _ixm->flushBucketChain(_curBucket)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
     _curBucket.clear();
     return IX_EOF;
 }
 
 RC IX_ScanIterator::getNextRangeMatch(RID &rid, void *key) {
+    RC err;
+
     while (_curBucketNum < _totalBucketNum) {
         if (_curBucket.empty()) {
             _ixm->loadBucketChain(_curBucket, _ixFileHandle, _curBucketNum, _keyType);
@@ -655,9 +880,13 @@ RC IX_ScanIterator::getNextRangeMatch(RID &rid, void *key) {
                 return SUCCESSFUL;
             } else {
                 _curPageIndex++;
+                _curRangeIndex = 0;
             }
         }
-        _ixm->flushBucketChain(_curBucket);
+        if ((err = _ixm->flushBucketChain(_curBucket)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
         _curBucket.clear();
         _curBucketNum++;
         _curPageIndex = 0;
@@ -679,10 +908,13 @@ RC IXFileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePa
     unsigned rc = 0, wc = 0, ac = 0;
     readPageCount = writePageCount = appendPageCount = 0;
     _primaryHandle.collectCounterValues(rc, wc, ac);
+//    __trace();
+//    cout << "Primary: rc " << rc << " wc " << wc << " ac " << ac << endl;
     readPageCount += rc;
     writePageCount += wc;
     appendPageCount += ac;
     _overflowHandle.collectCounterValues(rc, wc, ac);
+//    cout << "Overflow: rc " << rc << " wc " << wc << " ac " << ac << endl;
     readPageCount += rc;
     writePageCount += wc;
     appendPageCount += ac;
@@ -695,26 +927,36 @@ void IX_PrintError (RC rc)
 
 // MetadataPage implementations
 MetadataPage::MetadataPage(FileHandle &handle) : _fileHandle(handle), _dirty(false) {
-    if (handle.getNumberOfPages() == 0) {
+//    __trace();
+    if (_fileHandle.getNumberOfPages() == 0) {
+//        __trace();
         _initialized = false;
     } else {
         _initialized = true;
         RC rc = load();
         assert(rc == SUCCESSFUL);
     }
+//    __trace();
 }
 
 MetadataPage::~MetadataPage() {
-    if (_initialized || _dirty) {
+//    __trace();
+    if (_dirty) {
         RC err = flush();
         assert(err == SUCCESSFUL);
     }
+//    __trace();
 }
 
 RC MetadataPage::initialize(const unsigned &numberOfPages) {
+    if (_initialized) {
+        return ERR_INV_OPERATION;
+    }
+
     _entryCount = 0;
     _primaryPageCount = numberOfPages;
     _overflowPageCount = 0;
+    _delOverflowPageCount = 0;
     _currentBucketCount = numberOfPages;
     _nextSplitBucket = 0;
     _initialBucketCount = numberOfPages;
@@ -726,10 +968,12 @@ RC MetadataPage::initialize(const unsigned &numberOfPages) {
 }
 
 RC MetadataPage::load() {
+//    __trace();
     RC err;
     char page[PAGE_SIZE];
 
     if ((err = _fileHandle.readPage(0, page)) != SUCCESSFUL) {
+        __trace();
         return err;
     }
 
@@ -749,35 +993,52 @@ RC MetadataPage::load() {
     memcpy((char *) &_initialBucketCount, page + offset, sizeof(int));
     offset += sizeof(int);
 
+//    printMetadata();
+
     return SUCCESSFUL;
 }
 
 RC MetadataPage::flush() {
-    RC err;
-    char page[PAGE_SIZE];
+    if (_dirty) {
+        RC err;
+        char page[PAGE_SIZE];
 
-    int offset = 0;
-    memcpy(page + offset, (char *) &_entryCount, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_primaryPageCount, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_overflowPageCount, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_delOverflowPageCount, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_currentBucketCount, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_nextSplitBucket, sizeof(int));
-    offset += sizeof(int);
-    memcpy(page + offset, (char *) &_initialBucketCount, sizeof(int));
-    offset += sizeof(int);
+        int offset = 0;
+        memcpy(page + offset, (char *) &_entryCount, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_primaryPageCount, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_overflowPageCount, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_delOverflowPageCount, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_currentBucketCount, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_nextSplitBucket, sizeof(int));
+        offset += sizeof(int);
+        memcpy(page + offset, (char *) &_initialBucketCount, sizeof(int));
+        offset += sizeof(int);
 
-    if ((err = _fileHandle.writePage(0, page)) != SUCCESSFUL) {
-        return err;
+        if ((err = _fileHandle.writePage(0, page)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+        _dirty = false;
     }
-    _dirty = false;
 
     return SUCCESSFUL;
+}
+
+void MetadataPage::printMetadata() {
+    cout << "===== Metadata =====" << endl;
+    cout << "_entryCount: " << _entryCount << endl;
+    cout << "_primaryPageCount: " << _primaryPageCount << endl;
+    cout << "_overflowPageCount: " << _overflowPageCount << endl;
+    cout << "_delOverflowPageCount: " << _delOverflowPageCount << endl;
+    cout << "_currentBucketCount: " << _currentBucketCount << endl;
+    cout << "_nextSplitBucket: " << _nextSplitBucket << endl;
+    cout << "_initialBucketCount: " << _initialBucketCount << endl;
+    cout << "====================" << endl;
 }
 
 unsigned MetadataPage::getEntryCount() {
@@ -843,24 +1104,31 @@ bool MetadataPage::isInitialized() {
 }
 
 void MetadataPage::setInitialized(bool initialized) {
+    _dirty = true;
     _initialized = initialized;
 }
 
 // Implementations of class DataPage
 DataPage::DataPage(FileHandle &fileHandle, PageType pageType, AttrType keyType, unsigned pageNum, bool newPage)
-  : _fileHandle(fileHandle), _pageType(pageType), _keyType(keyType), _pageNum(pageNum), _dirty(false) {
+  : _fileHandle(fileHandle), _pageType(pageType), _keyType(keyType), _pageNum(pageNum), _dirty(false), _discarded(false) {
     RC err;
+//    __trace();
     if (newPage) {
+//        __trace();
         initialize();
     } else {
+//        __trace();
         err = load();
         assert(err == SUCCESSFUL);
     }
+//    __trace();
 }
 
 DataPage::~DataPage() {
+//    __trace();
     RC err = flush();
     assert(err == SUCCESSFUL);
+//    __trace();
 }
 
 RC DataPage::initialize() {
@@ -871,6 +1139,7 @@ RC DataPage::initialize() {
     _rids.clear();
     _entryMap.clear();
     _dirty = true;
+    _discarded = false;
     return SUCCESSFUL;
 }
 
@@ -892,11 +1161,14 @@ RC DataPage::load() {
         _entryMap[_keys[i].toString()].push_back(i);
     }
 
+//    printMetadata();
+
     return SUCCESSFUL;
 }
 
 RC DataPage::flush() {
     if (!_dirty || _discarded) {
+//        __trace();
         return SUCCESSFUL;
     }
 
@@ -946,8 +1218,10 @@ RC DataPage::findKeyIndexes(KeyValue &key, vector<int> &indexes) {
 }
 
 bool DataPage::hasSpace(KeyValue &key) {
+//    __trace();
     size_t esize = entrySize(key);
-    return esize + _entriesSize < 6 * META_UNIT;
+//    cout << "\tCurrentEntrySize: " << _entriesSize << ", new: " << esize << endl;
+    return esize + _entriesSize < PAGE_SIZE - 6 * META_UNIT;
 }
 
 bool DataPage::doExist(KeyValue &key, const RID &rid) {
@@ -1014,6 +1288,17 @@ RC DataPage::remove(KeyValue &key, const RID &rid) {
     return SUCCESSFUL;
 }
 
+void DataPage::printMetadata() {
+    cout << "===== DataPage =====" << endl;
+    cout << "_pageType: " << _pageType << endl;
+    cout << "_keyType: " << _keyType << endl;
+    cout << "_pageNum: " << _pageNum << endl;
+    cout << "_entriesCount: " << _entriesCount << endl;
+    cout << "_entriesSize: " << _entriesSize << endl;
+    cout << "_nextPageNum: " << _nextPageNum << endl;
+    cout << "====================" << endl;
+}
+
 PageType DataPage::getPageType() {
     return _pageType;
 }
@@ -1055,6 +1340,7 @@ unsigned DataPage::getEntriesSize() {
 }
 
 void DataPage::setEntriesSize(unsigned entriesSize) {
+    _dirty = true;
     _entriesSize = entriesSize;
 }
 
@@ -1063,6 +1349,7 @@ unsigned DataPage::getNextPageNum() {
 }
 
 void DataPage::setNextPageNum(unsigned nextPageNum) {
+    _dirty = true;
     _nextPageNum = nextPageNum;
 }
 
@@ -1127,9 +1414,12 @@ void DataPage::deserializeData(void *page) {
             offset += sizeof(float);
             break;
         case TypeVarChar:
-            size_t size;
+            int size;
             memcpy((char *) &size, (char *) page + offset, sizeof(int));
-            assert(size < PAGE_SIZE);
+            if (size < 0 || size > PAGE_SIZE) {
+                __trace();
+                cout << "Invalid size: " << size << " at i = " << i << endl;
+            }
             memcpy((char *) buf, (char *) page + offset, sizeof(int) + size);  // copy whole data
             offset += (sizeof(int) + size);
             break;

@@ -172,6 +172,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
     }
 
     readPageCounter++;
+//    std::cout << fileName << " readPageCounter " << readPageCounter << std::endl;
     return SUCCESSFUL;
 }
 
@@ -187,9 +188,15 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
  */
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
-    if (pageNum > getNumberOfPages() || pageNum < 0) {
+    bool append = false;
+    unsigned totalPages = getNumberOfPages();
+    if (pageNum > totalPages || pageNum < 0) {
         __trace();
+        std::cout << "Trying to write page " << pageNum << " but total page count is " << totalPages << std::endl;
         return ERR_LOCATE;
+    }
+    if (pageNum == totalPages) {
+        append = true;
     }
 
     long curPos = pageNum * PAGE_SIZE;
@@ -204,7 +211,13 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
         return ERR_WRITE;
     }
 
-    writePageCounter++;
+    if (append) {
+        appendPageCounter++;
+//        std::cout << fileName << " appendPageCounter " << appendPageCounter << std::endl;
+    } else {
+        writePageCounter++;
+//        std::cout << fileName << " writePageCounter " << writePageCounter << std::endl;
+    }
     return SUCCESSFUL;
 }
 
@@ -228,7 +241,6 @@ RC FileHandle::appendPage(const void *data)
              << " current pageCount " << getNumberOfPages() << std::endl;
     }
 
-    appendPageCounter++;
     return rc;
 }
 
@@ -244,6 +256,7 @@ unsigned FileHandle::getNumberOfPages()
     FILE *fp = getFilePointer();
     if (fseek(fp, 0, SEEK_END)) {
         __trace();
+        perror("Cannot locate");
         exit(ERR_LOCATE);
     }
     if ((fileSize = ftell(fp)) == -1) {
@@ -314,9 +327,11 @@ void FileHandle::setFileName(const char *name) {
  * Collect statistics.
  */
 RC FileHandle::collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount) {
-    readPageCount = this->readPageCounter;
-    writePageCount = this->writePageCounter;
-    appendPageCount = this->appendPageCounter;
+    readPageCount = readPageCounter;
+    writePageCount = writePageCounter;
+    appendPageCount = appendPageCounter;
+//    __trace();
+//    std::cout << "fileName: " << fileName << " rc " << readPageCounter << " wc " << writePageCounter << " ac " << appendPageCounter << std::endl;
 
     return SUCCESSFUL;
 }

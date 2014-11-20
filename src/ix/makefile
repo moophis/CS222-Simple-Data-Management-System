@@ -51,5 +51,5 @@ $(CODEROOT)/rbf/librbf.a:
 
 .PHONY: clean
 clean:
-	-rm ixtest1 ixtest2 ixtest3 ixtest4a ixtest4b ixtest4c ixtest5 ixtest6 ixtest7 ixtest8 ixtest_extra_1 ixtest_extra_2 ixtest_extra_2a ixtest_extra_2b ixtest_extra_2c ixtest_extra_2d *.a *.o
+	-rm ixtest1 ixtest2 ixtest3 ixtest4a ixtest4b ixtest4c ixtest5 ixtest6 ixtest7 ixtest8 ixtest_extra_1 ixtest_extra_2 ixtest_extra_2a ixtest_extra_2b ixtest_extra_2c ixtest_extra_2d *.a *.o age_idx.*
 	$(MAKE) -C $(CODEROOT)/rbf clean

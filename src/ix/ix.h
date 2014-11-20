@@ -25,10 +25,11 @@ enum {
     ERR_BAD_PAGE            = -302,     // error: bad page data
     ERR_OUT_OF_BOUND        = -303,     // error: index out of bound
     ERR_METADATA_MISSING    = -304,     // error: cannot find metadata
-    ERR_METADATA_ERROR      = -305,      // error: metadata error
+    ERR_METADATA_ERROR      = -305,     // error: metadata error
     ERR_NO_SPACE            = -306,     // error: page doesn't have enough space
     ERR_ENTRY_NOT_FOUND     = -307,     // error: cannot find the entry
     ERR_DUPLICATE_ENTRY     = -308,     // error: duplicate entry found in the same page
+    ERR_INV_OPERATION       = -309,     // error: invalid operation
 };
 
 class IX_ScanIterator;
@@ -121,16 +122,33 @@ class IndexManager {
                    unsigned bucketNum, const AttrType &keyType);
 
   // flush all pages within a given bucket
-  void flushBucketChain(vector<DataPage *> &buf);
+  RC flushBucketChain(vector<DataPage *> &buf);
 
   // Redistribute entries between two bucket chains (used for split operation)
   RC rebalanceBetween(IXFileHandle &ixfileHandle, unsigned oldBucket, vector<DataPage *> &oldCache,
           unsigned newBucket, vector<DataPage *> &newCache, MetadataPage &metadata, const Attribute &attribute);
 
   // Redistributed entries within a bucket chain (used when there is at least one emtpy page)
-  // Check whether the bucket chain is empty.
+  // It can also check whether the bucket chain is empty.
   RC rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
           vector<DataPage *> &cache, bool &emptyBucket, MetadataPage &metadata);
+
+  // Insert an entry into a bucket given the buffer of the bucket
+  RC insertInternal(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+          const RID &rid, bool &inserted);
+
+  // Insert an entry in a new appended page at the end of the give bucket
+  RC appendInternal(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+          const RID &rid, MetadataPage &metadata, IXFileHandle &ixfileHandle,
+          const Attribute &attribute);
+
+  // Insert an entry into bucket. Append a new page if necessary
+  RC insertIntoBucket(vector<DataPage *> &cachedPages, KeyValue &keyValue,
+          const RID &rid, MetadataPage &metadata, IXFileHandle &ixfileHandle,
+          const Attribute &attribute);
+
+  // Check whether the given bucket is empty
+  bool isEmptyBucket(vector<DataPage *> &cache);
 
   // Grow primary page(s) until the file can hold up to the page of #pageNum
   RC growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const AttrType &keyType);
@@ -151,28 +169,32 @@ public:
     KeyValue(string val) : _varchar(val), _keyType(TypeVarChar), _size(sizeof(int) + val.size()) {}
     // Building key value from raw data
     KeyValue(const void *data, AttrType keyType) : _keyType(keyType) {
-        switch (_keyType) {
-        case TypeInt:
-            memcpy((char *) &_int, (char *) data, sizeof(int));
-            _size = sizeof(int);
-            break;
-        case TypeReal:
-            memcpy((char *) &_float, (char *) data, sizeof(float));
-            _size = sizeof(float);
-            break;
-        case TypeVarChar:
-            int size;
-            memcpy((char *) &size, (char *) data, sizeof(int));
-            assert(size < PAGE_SIZE && size > 0);
-            char buf[PAGE_SIZE];
-            memcpy((char *) buf, (char *) data + sizeof(int), size);
-            buf[size] = 0;
-            _varchar.assign(buf);
-            _size = sizeof(int) + size;
-            break;
-        default:
-            __trace();
-            break;
+        if (!data) {
+            KeyValue();
+        } else {
+            switch (_keyType) {
+            case TypeInt:
+                memcpy((char *) &_int, (char *) data, sizeof(int));
+                _size = sizeof(int);
+                break;
+            case TypeReal:
+                memcpy((char *) &_float, (char *) data, sizeof(float));
+                _size = sizeof(float);
+                break;
+            case TypeVarChar:
+                int size;
+                memcpy((char *) &size, (char *) data, sizeof(int));
+                assert(size < PAGE_SIZE && size > 0);
+                char buf[PAGE_SIZE];
+                memcpy((char *) buf, (char *) data + sizeof(int), size);
+                buf[size] = 0;
+                _varchar.assign(buf);
+                _size = sizeof(int) + size;
+                break;
+            default:
+                __trace();
+                break;
+            }
         }
     }
 
@@ -395,7 +417,7 @@ private:
     unsigned _nextSplitBucket;     // the next page to be split
     unsigned _initialBucketCount;  // the initial # of bucket (power of 2)
 
-    FileHandle _fileHandle;        // associated file handle to the metadata file
+    FileHandle &_fileHandle;        // associated file handle to the metadata file
     bool _initialized;             // whether the page has been initialized
     bool _dirty;                   // indicate whether the page has been changed
 
@@ -411,6 +433,8 @@ public:
 
     // write back the metadata into the file
     RC flush();
+
+    void printMetadata();
 
     unsigned getEntryCount();
     void setEntryCount(unsigned entryCount);
@@ -442,7 +466,7 @@ typedef enum {
 class DataPage {
     friend class IndexManager;
 private:
-    FileHandle _fileHandle;    // associated file handle to the metadata file
+    FileHandle &_fileHandle;    // associated file handle to the metadata file
 
     PageType _pageType;        // (primary or overflow) @ PAGE_SIZE - META_UNIT
     AttrType _keyType;         // (Int, Real, Varchar) @ PAGE_SIZE - META_UNIT * 2
@@ -494,6 +518,9 @@ public:
 
     // Remove a <key, RID> par in the current page
     RC remove(KeyValue &key, const RID &rid);
+
+    // Print metadata of the page
+    void printMetadata();
 
     PageType getPageType();
     void setPageType(PageType pageType);

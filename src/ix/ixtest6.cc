@@ -66,6 +66,7 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
         rid.pageNum = i;
         rid.slotNum = i;
 
+//        cout << " ## @ i = " << i << " key: " << key << " hash: " << indexManager->hash(attribute, &key) <<endl;
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         if(rc != success)
         {
@@ -78,6 +79,8 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
         	inRidPageNumSum += rid.pageNum;
         }
     }
+
+//    cout << " ## First 2000 inserted!" << endl;
 
     for(unsigned i = 6000; i <= numOfTuples+6000; i++)
     {
@@ -89,6 +92,7 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
         if(rc != success)
         {
             cout << "Failed Inserting Keys..." << endl;
+            cout << " ## @ i = " << i << " key: " << key << " hash: " << indexManager->hash(attribute, &key) <<endl;
         	indexManager->closeFile(ixfileHandle);
         	return fail;
         }
@@ -97,6 +101,8 @@ int testCase_6(const string &indexFileName, const Attribute &attribute)
         	inRidPageNumSum += rid.pageNum;
         }
     }
+
+//    cout << " ## Second 2000 inserted!" << endl;
 
     // scan
     rc = indexManager->scan(ixfileHandle, attribute, NULL, &compVal, true, false, ix_ScanIterator);

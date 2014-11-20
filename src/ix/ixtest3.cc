@@ -45,6 +45,7 @@ int testCase_3(const string &indexFileName, const Attribute &attribute)
         rid.pageNum = i;
         rid.slotNum = i+1;
 
+//        cout << endl << " ## Inserting i = " << i << endl;
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         if(rc != success)
         {
@@ -52,6 +53,10 @@ int testCase_3(const string &indexFileName, const Attribute &attribute)
             indexManager->closeFile(ixfileHandle);
             return fail;
         }
+
+//        // New added
+//        cout << " ## Printing bucket 2..." << endl;
+//        indexManager->printIndexEntriesInAPage(ixfileHandle, attribute, 2);
     }
 
 	// Get number of primary pages
@@ -84,7 +89,7 @@ int testCase_3(const string &indexFileName, const Attribute &attribute)
         cout << "Failed Closing Index File..." << endl;
         return fail;
     }
-    
+
     // destroy index file
     rc = indexManager->destroyFile(indexFileName);
     if(rc != success)
