@@ -68,7 +68,7 @@ RC IndexManager::createFile(const string &fileName, const unsigned &numberOfPage
     }
 
     __trace();
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 RC IndexManager::destroyFile(const string &fileName)
@@ -84,7 +84,7 @@ RC IndexManager::destroyFile(const string &fileName)
         return err;
     }
 
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 RC IndexManager::openFile(const string &fileName, IXFileHandle &ixFileHandle)
@@ -100,7 +100,7 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixFileHandle)
         return err;
     }
 
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
@@ -457,7 +457,7 @@ RC IndexManager::getNumberOfAllPages(IXFileHandle &ixfileHandle, unsigned &numbe
     numberOfAllPages += metadata.getOverflowPageCount() - metadata.getDelOverflowPageCount();
     numberOfAllPages++;     // metadata page
 
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 
@@ -768,9 +768,7 @@ RC IndexManager::growToFit(IXFileHandle &ixfileHandle, unsigned pageNum, const A
 
 unsigned IndexManager::calcBucketNumber(KeyValue &keyValue, const Attribute &attribute,
         MetadataPage &metadata) {
-    char raw[PAGE_SIZE];
-    keyValue.getRaw(raw);
-    unsigned hashVal = hash(attribute, raw);
+    unsigned hashVal = keyValue.hashCode();
     unsigned p = metadata.getNextSplitBucket();
     unsigned n = metadata.getCurrentBucketCount();
     unsigned bucket = hashVal & (n - 1);
