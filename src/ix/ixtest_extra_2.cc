@@ -80,15 +80,16 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
         }
     }
 
-    /*
-     * New
-     */
-    unsigned count = 0;
-    indexManager->getNumberOfPrimaryPages(ixfileHandle, count);
-    for (unsigned i = 0; i < count; i++) {
-        cout << "[BUCKET " << i << "] -->" << endl;
-        indexManager->printIndexEntriesInAPage(ixfileHandle, attribute, i);
-    }
+//    /*
+//     * New
+//     */
+//    cout << "Before deletion scan..." << endl;
+//    unsigned count = 0;
+//    indexManager->getNumberOfPrimaryPages(ixfileHandle, count);
+//    for (unsigned i = 0; i < count; i++) {
+//        cout << "[BUCKET " << i << "] -->" << endl;
+//        indexManager->printIndexEntriesInAPage(ixfileHandle, attribute, i);
+//    }
 
     // scan - EXACT MATCH
     rc = indexManager->scan(ixfileHandle, attribute, &compVal, &compVal, true, true, ix_ScanIterator);
@@ -182,6 +183,17 @@ int testCase_extra_2(const string &indexFileName, const Attribute &attribute)
     	indexManager->closeFile(ixfileHandle);
     	return fail;
     }
+
+//    /*
+//     * New
+//     */
+//    cout << "After deletion scan..." << endl;
+//    count = 0;
+//    indexManager->getNumberOfPrimaryPages(ixfileHandle, count);
+//    for (unsigned i = 0; i < count; i++) {
+//        cout << "[BUCKET " << i << "] -->" << endl;
+//        indexManager->printIndexEntriesInAPage(ixfileHandle, attribute, i);
+//    }
 
     //close index file file
     rc = indexManager->closeFile(ixfileHandle);

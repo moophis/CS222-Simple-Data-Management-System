@@ -318,37 +318,44 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     bool emptyBucket = false;
     rebalanceWithin(ixfileHandle, bucket, cachedPages, emptyBucket, metadata);
 
-    // Update metadata
-    unsigned p = metadata.getNextSplitBucket();
-    unsigned n = metadata.getCurrentBucketCount();
-    unsigned total = metadata.getPrimaryPageCount();
-    unsigned init = metadata.getInitialBucketCount();
-    while (emptyBucket && bucket == total - 1 && total > init) {
-        __trace();
-        // Shrink the bucket
-        total--;
-        if (p == 0) {
-            n >>= 1;
-            p = n - 1;
-        } else {
-            p--;
-        }
-        // Continue shrinking if the new last bucket is still empty
-        vector<DataPage *> cache;
-        bucket = total - 1;
-        loadBucketChain(cache, ixfileHandle, bucket, attribute.type);
-        rebalanceWithin(ixfileHandle, bucket, cache, emptyBucket, metadata);
-    }
-    metadata.setNextSplitBucket(p);
-    metadata.setCurrentBucketCount(n);
-    metadata.setPrimaryPageCount(total);
-    metadata.setEntryCount(metadata.getEntryCount() - 1);
-
     // flush bucket
     if ((err = flushBucketChain(cachedPages)) != SUCCESSFUL) {
         __trace();
         return err;
     }
+
+    // Update metadata and shrink buckets if possible
+    unsigned p = metadata.getNextSplitBucket();
+    unsigned n = metadata.getCurrentBucketCount();
+    unsigned total = metadata.getPrimaryPageCount();
+    unsigned init = metadata.getInitialBucketCount();
+    for (unsigned i = total - 1; i >= init; i--) {
+        vector<DataPage *> cache;
+        loadBucketChain(cache, ixfileHandle, i, attribute.type);
+        bool empty = isEmptyBucket(cache);
+        if ((err = flushBucketChain(cache)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+        if (!empty) {
+            break;
+        } else {
+            __trace();
+            // Shrink the bucket
+            total--;
+            if (p == 0) {
+                n >>= 1;
+                p = n - 1;
+            } else {
+                p--;
+            }
+        }
+    }
+
+    metadata.setNextSplitBucket(p);
+    metadata.setCurrentBucketCount(n);
+    metadata.setPrimaryPageCount(total);
+    metadata.setEntryCount(metadata.getEntryCount() - 1);
 
     return SUCCESSFUL;
 }
@@ -656,7 +663,7 @@ RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
         } else {
             for (size_t i = 1; i < cache.size(); i++) {
                 if (cache[i]->getEntriesCount() == 0) {
-                    __trace();
+//                    __trace();
                     cache[i-1]->setNextPageNum(cache[i]->getNextPageNum());
                     cache[i]->discard();
                     deleted++;
@@ -735,7 +742,7 @@ bool IndexManager::isEmptyBucket(vector<DataPage *> &cache) {
             return false;
         }
         if (cache[i]->getNextPageNum() == PAGE_END) {
-            return true;;
+            return true;
         }
     }
     __trace();   // Not reach (pages should end with PAGE_END)
