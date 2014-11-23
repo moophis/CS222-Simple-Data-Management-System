@@ -1,0 +1,41 @@
+Project 3 Report
+=====================
+In this phase, we have implemented the indexing management module by Linear
+Hashing data structure in order to support faster exact-match query.
+
+We use two files to store one index. One file contains a page of metadata 
+and overflow pages; Another file contains all primary pages. Metadata page
+resides ahead of overflow pages. So overflow page number starts from 1 while
+primary page number starts from 0 as we expect.
+
+In the metadata page, we keep track of the following information:
+    - # of entries in this index
+    - # of total primary pages
+    - # of total overflow pages
+    - # of deleted overflow pages (to support lazy deletion)
+    - current level (used for LH algorithm)
+    - p: next split bucket (used for LH algorithm)
+    - initial bucket #
+
+In data pages, we store the <key, RID> pair as well as the following metadata:
+    - page type (primary or overflow page)
+    - key type (Int, Real or VarChar)
+    - page number
+    - # of entries
+    - entries size (We use that to know whether the page is full)
+    - page number of the next page in the bucket chain (0 the current page is
+      the last page)
+
+In order to manage each page in a cleaner way, we abstract each out as single 
+objects. Specifically, we create two classes:
+    - MetadataPage
+    - DataPage
+On constructor of each page object, the class checks whether the current page is a new
+page to be created. If so, create the page structure in memory. Otherwise load
+the page data as well as its metadata from the disk. We store the data into a
+vector and build a hash map from key to index of that data vector in order to
+support constant cost lookup. On destructor of each page object, all in-memory data
+are written back to disk if the data have been modified.
+
+In order to support deletion scan, the scan iterator chooses to store one bucket of pages
+at a time as the buffer. When the current bucket is deplete, we buffer the next bucket.

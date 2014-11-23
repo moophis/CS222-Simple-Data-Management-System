@@ -802,7 +802,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 RC IX_ScanIterator::close()
 {
     this->_active = false;
-	return SUCCESSFUL;
+    return SUCCESSFUL;
 }
 
 RC IX_ScanIterator::getNextHashMatch(RID &rid, void *key) {
