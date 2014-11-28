@@ -94,9 +94,13 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixFileHandle)
     string overflow = fileName + OVERFLOW_SUFFIX;
 
     if ((err = _pfm->openFile(primary.c_str(), ixFileHandle._primaryHandle)) != SUCCESSFUL) {
+        __trace();
+        cout << "Cannot open: " << primary << endl;
         return err;
     }
     if ((err = _pfm->openFile(overflow.c_str(), ixFileHandle._overflowHandle)) != SUCCESSFUL) {
+        __trace();
+        cout << "Cannot open: " << overflow << endl;
         return err;
     }
 

@@ -45,11 +45,18 @@ int main()
 {
     // NOTE: your Tables table must be called "Tables"
     string catalog_table_name = "Tables";
+    string catalog_column_name = "Columns";
+    string catalog_index_name = "Indexes";
 
     cout << endl << "Test Catalog Information .." << endl;
 
     // Test Catalog Information
     TEST_RM_16(catalog_table_name);
+    cout << endl;
+//    TEST_RM_16(catalog_column_name);
+//    cout << endl;
+    TEST_RM_16(catalog_index_name);
+    cout << endl;
 
     return 0;
 }

@@ -375,4 +375,50 @@ void readSizesFromDisk(vector<int> &sizes, int numRecords)
 	}
 }
 
+
+void printAttribute(void *data, AttrType &type) {
+    int _int;
+    float _float;
+    string _varchar;
+    cout << "Data: ";
+
+    switch (type) {
+    case TypeInt:
+        memcpy((char *) &_int, (char *) data, sizeof(int));
+        cout << _int;
+        break;
+    case TypeReal:
+        memcpy((char *) &_float, (char *) data, sizeof(float));
+        cout << _float;
+        break;
+    case TypeVarChar:
+        int size;
+        memcpy((char *) &size, (char *) data, sizeof(int));
+        assert(size < PAGE_SIZE && size > 0);
+        char buf[PAGE_SIZE];
+        memcpy((char *) buf, (char *) data + sizeof(int), size);
+        buf[size] = 0;
+        _varchar.assign(buf);
+        cout << _varchar;
+        break;
+    default:
+        break;
+    }
+    cout << endl;
+}
+
+void scanIndex(const string &tableName, const string &attributeName, AttrType type) {
+    RM_IndexScanIterator rm_IndexScanIterator;
+    RC rc = rm->indexScan(tableName, attributeName, NULL, NULL, false, false, rm_IndexScanIterator);
+    assert(rc == success);
+    char key[PAGE_SIZE];
+    RID rid;
+    while (rm_IndexScanIterator.getNextEntry(rid, key) != IX_EOF) {
+        cout << ">>>>" << endl;
+        printAttribute(key, type);
+        cout << "RID: <" << rid.pageNum << ", " << rid.slotNum << ">" << endl;
+        cout << "<<<<" << endl;
+    }
+}
+
 #endif

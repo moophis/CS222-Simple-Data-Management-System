@@ -51,57 +51,61 @@ rmtest_extra_2.o: rm.h
 rmtest_extra_3.o: rm.h
 
 # binary dependencies
-rmtest_create_tables: rmtest_create_tables.o librm.a $(CODEROOT)/rbf/librbf.a
+rmtest_create_tables: rmtest_create_tables.o librm.a $(CODEROOT)/rbf/librbf.a $(CODEROOT)/ix/libix.a
 
-rmtest_00: rmtest_00.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_00: rmtest_00.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_01: rmtest_01.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_01: rmtest_01.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_02: rmtest_02.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_02: rmtest_02.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_03: rmtest_03.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_03: rmtest_03.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_04: rmtest_04.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_04: rmtest_04.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_05: rmtest_05.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_05: rmtest_05.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_06: rmtest_06.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_06: rmtest_06.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_07: rmtest_07.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_07: rmtest_07.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_08a: rmtest_08a.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_08a: rmtest_08a.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_08b: rmtest_08b.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_08b: rmtest_08b.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_09: rmtest_09.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_09: rmtest_09.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_10: rmtest_10.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_10: rmtest_10.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_11: rmtest_11.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_11: rmtest_11.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_12: rmtest_12.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_12: rmtest_12.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_13: rmtest_13.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_13: rmtest_13.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_14: rmtest_14.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_14: rmtest_14.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_15: rmtest_15.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_15: rmtest_15.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_16: rmtest_16.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_16: rmtest_16.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_extra_1: rmtest_extra_1.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_extra_1: rmtest_extra_1.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_extra_2: rmtest_extra_2.o librm.a $(CODEROOT)/rbf/librbf.a 
+rmtest_extra_2: rmtest_extra_2.o librm.a $(CODEROOT)/rbf/librbf.a  $(CODEROOT)/ix/libix.a
 
-rmtest_extra_3: rmtest_extra_3.o librm.a $(CODEROOT)/rbf/librbf.a
+rmtest_extra_3: rmtest_extra_3.o librm.a $(CODEROOT)/rbf/librbf.a $(CODEROOT)/ix/libix.a
 
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a
 $(CODEROOT)/rbf/librbf.a:
 	$(MAKE) -C $(CODEROOT)/rbf librbf.a
 
+.PHONY: $(CODEROOT)/ix/libix.a
+$(CODEROOT)/ix/libix.a:
+	$(MAKE) -C $(CODEROOT)/ix libix.a
 
 .PHONY: clean
 clean:
 	-rm rmtest_create_tables rmtest_00 rmtest_01 rmtest_02 rmtest_03 rmtest_04 rmtest_05 rmtest_06 rmtest_07 rmtest_08a rmtest_08b rmtest_09 rmtest_10 rmtest_11 rmtest_12 rmtest_13 rmtest_14 rmtest_15 rmtest_16 rmtest_extra_1 rmtest_extra_2 rmtest_extra_3 *.a *.o *~ 
 	$(MAKE) -C $(CODEROOT)/rbf clean
+	$(MAKE) -C $(CODEROOT)/ix clean

@@ -341,6 +341,7 @@ private:
 class IXFileHandle {
     friend class IndexManager;
     friend class IX_ScanIterator;
+    friend class RelationManager;
 
 public:
     // Put the current counter values of associated PF FileHandles into variables
