@@ -36,7 +36,7 @@ void Test09()
   exec("load employee employee_5");
 
   exec("print employee");
-
+//
   exec("SELECT AGG employee GET MAX(Height)");
 
   exec("SELECT AGG employee GET MIN(Salary)");
@@ -46,7 +46,7 @@ void Test09()
   exec("SELECT AGG (PROJECT employee GET [ Salary ]) GET SUM(Salary)");
 
   exec("SELECT AGG (PROJECT employee GET [ Salary ]) GET COUNT(Salary)");
-
+//
   exec("SELECT AGG (PROJECT employee GET [ Salary ]) GET AVG(Salary)");
 
   exec("SELECT AGG (PROJECT employee GET [ * ]) GET COUNT(Height)");

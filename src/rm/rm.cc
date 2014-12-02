@@ -58,7 +58,7 @@ RelationManager::RelationManager()
 
     // Wire metadata of those two files in the catalog
     if (newTablesFile || newColumnsFile || newIndexesFile) {
-        __trace();
+//        __trace();
         err = wireTableMetadata(TABLES_NAME, TABLES_ID, tablesSchema);
         assert(err == SUCCESSFUL);
         err = wireTableMetadata(COLUMNS_NAME, COLUMNS_ID, columnsSchema);
@@ -93,7 +93,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     // Create new file for the table
     if ((err = _rbfm->createFile(getTableFileName(tableName))) != SUCCESSFUL) {
         __trace();
-        cout << "err = " << err << endl;
+//        cout << "table: " << tableName << " err = " << err << endl;
         return err;
     }
 
@@ -103,7 +103,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     // Wire schema info into catalog files
     if ((err = wireTableMetadata(tableName, tableId, attrs)) != SUCCESSFUL) {
         __trace();
-        cout << "err = " << err << endl;
+        cout << "table: " << tableName << " err = " << err << endl;
         return err;
     }
 
@@ -526,6 +526,7 @@ RC RelationManager::scan(const string &tableName,
 }
 
 // TODO
+// attributeName does not contain table name
 RC RelationManager::createIndex(const string &tableName, const string &attributeName) {
     RC err;
     int tableId;
@@ -536,6 +537,7 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         return err;
     }
 
+//    string fullAttrName = getFullAttriuteName(tableName, attributeName);
     if (doesIndexExist(tableId, attributeName)) {
         __trace();
         return ERR_INDEX_EXISTS;
@@ -544,6 +546,8 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
     // Create index files
     string indexName = getIndexName(attributeName, tableId);
     string indexFileName = getIndexFileName(indexName);
+//    __trace();
+//    cout << "Creating Index, Filename: " << indexFileName << endl;
     if ((err = _ixm->createFile(indexFileName, INIT_INDEX_PAGE)) != SUCCESSFUL) {
         __trace();
         return err;
@@ -561,10 +565,29 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         return err;
     }
 
+    // TODO: scan existing table and build the index accordingly
+    RM_ScanIterator rm_ScanIterator;
+    vector<string> projected;
+    projected.push_back(attributeName);
+    if ((err = scan(tableName, "", NO_OP, NULL, projected, rm_ScanIterator)) != SUCCESSFUL) {
+        __trace();
+        return err;
+    }
+
+    char key[PAGE_SIZE];
+    RID rid;
+    while (rm_ScanIterator.getNextTuple(rid, key) != RM_EOF) {
+        if ((err = insertIndexEntry(tableId, attr, key, rid)) != SUCCESSFUL) {
+            __trace();
+            return err;
+        }
+    }
+
     return SUCCESSFUL;
 }
 
 // TODO
+// attributeName does not contain table name
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName) {
     RC err;
     int tableId;
@@ -575,12 +598,16 @@ RC RelationManager::destroyIndex(const string &tableName, const string &attribut
         return err;
     }
 
+//    string fullAttrName = getFullAttriuteName(tableName, attributeName);
     if (!doesIndexExist(tableId, attributeName)) {
+        __trace();
         return ERR_NO_SUCH_INDEX;
     }
 
     string indexName = getIndexName(attributeName, tableId);
     string indexFileName = getIndexFileName(indexName);
+//    __trace();
+//    cout << "Destroy Index, Filename: " << indexFileName << endl;
 
     // Drop index file handle if cached
     IXFileHandle handle;
@@ -613,19 +640,26 @@ RC RelationManager::indexScan(const string &tableName,
                         bool highKeyInclusive,
                         RM_IndexScanIterator &rm_IndexScanIterator) {
     RC err;
+//    __trace();
+//    cout << "indexScan(): " << attributeName << endl;
+
+    string realColumnName = retrieveColumnName(attributeName);
+//    cout << "After sanitizing, column: " << realColumnName << endl;
 
     int tableId;
     if ((err = getTableId(tableName, tableId)) != SUCCESSFUL) {
         __trace();
-        cout << "Table " << tableName << " does not exist!" << endl;
+        cout << "Scan: Table " << tableName << " does not exist!" << endl;
         return err;
     }
 
-    string indexName = getIndexName(attributeName, tableId);
+    string indexName = getIndexName(realColumnName, tableId);
     string indexFileName = getIndexFileName(indexName);
 
-    if (!doesIndexExist(tableId, attributeName)) {
+    if (!doesIndexExist(tableId, realColumnName)) {
         __trace();
+        cout << "Cannot find index for " << tableName << " id: " << tableId
+             << " : " << realColumnName << " ->File: " << indexFileName <<  endl;
         return ERR_NO_SUCH_INDEX;
     }
 
@@ -639,7 +673,7 @@ RC RelationManager::indexScan(const string &tableName,
 
     // Get attribute from string
     Attribute attr;
-    if ((err = getAttributeFromString(tableName, attributeName, attr)) != SUCCESSFUL) {
+    if ((err = getAttributeFromString(tableName, realColumnName, attr)) != SUCCESSFUL) {
         __trace();
         return err;
     }
@@ -746,6 +780,15 @@ RC RelationManager::deleteIndexEntries(const string &tableName,
     }
 
     return SUCCESSFUL;
+}
+
+string RelationManager::retrieveColumnName(const string &attributeName) {
+    size_t dot = attributeName.find_first_of('.');
+    if (dot == std::string::npos) {
+        return attributeName;
+    } else {
+        return attributeName.substr(dot + 1);
+    }
 }
 
 // Extra credit
@@ -1049,6 +1092,8 @@ RC RelationManager::dropTableMetadata(const string &tableName) {
     RID rid;
     int tableId;
 
+//    __trace();
+//    printCatalogMaps();
     // table metadata in "Tables"
     if ((err = getTableId(tableName, tableId)) != SUCCESSFUL) {
         __trace();
@@ -1058,6 +1103,7 @@ RC RelationManager::dropTableMetadata(const string &tableName) {
         __trace();
         return err;
     }
+//    cout << "Table catalog RID: " << rid.pageNum << ", " << rid.slotNum << endl;
     if ((err = deregisterTableMapping(tableName, rid)) != SUCCESSFUL) {
         __trace();
         return err;
@@ -1074,6 +1120,7 @@ RC RelationManager::dropTableMetadata(const string &tableName) {
         return err;
     }
     for (size_t i = 0; i < rids.size(); i++) {
+//        cout << "Column catalog RID: " << rids[i].pageNum << ", " << rids[i].slotNum << endl;
         if ((err = _rbfm->deleteRecord(tableHandles[COLUMNS_NAME], this->columnsSchema, rids[i])) != SUCCESSFUL) {
             __trace();
             return err;
@@ -1089,6 +1136,9 @@ RC RelationManager::dropTableMetadata(const string &tableName) {
 //            return err;
 //        }
 //    }
+
+//    cout << "Print catalog maps after deleting table: " << endl;
+//    printCatalogMaps();
 
     return SUCCESSFUL;
 }
@@ -1245,6 +1295,10 @@ RC RelationManager::bufferMappings() {
         // Update index key mapping
         appendIndexKeyMapping(tableId, attr, rid);
     }
+
+//    __trace();
+//    cout << "Print catalog maps after loading catalog into memory: " << endl;
+//    printCatalogMaps();
 
     return SUCCESSFUL;
 }
@@ -1405,15 +1459,20 @@ string RelationManager::getTableFileName(const string &tableName) {
 }
 
 // TODO
-string RelationManager::getIndexName(const string &keyName, const int &tableId) {
+string RelationManager::getIndexName(const string &attributeName, const int &tableId) {
     stringstream ss;
-    ss << tableId << "_" << keyName;
+    ss << tableId << "_" << attributeName;
     return ss.str();
 }
 
 // TODO
 string RelationManager::getIndexFileName(const string &indexName) {
     return indexName + INDEX_FILE_SUFFIX;
+}
+
+// TODO
+string RelationManager::getFullAttriuteName(const string &tableName, const string &keyName) {
+    return tableName + "." + keyName;
 }
 
 RC RelationManager::getTableFileHandle(const string &tableName, FileHandle &fileHandle) {

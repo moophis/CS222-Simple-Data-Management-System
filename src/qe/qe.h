@@ -2,6 +2,8 @@
 #define _qe_h_
 
 #include <vector>
+#include <cfloat>
+#include <climits>
 
 #include "../rbf/rbfm.h"
 #include "../rm/rm.h"
@@ -13,6 +15,11 @@ using namespace std;
 
 typedef enum{ MIN = 0, MAX, SUM, AVG, COUNT } AggregateOp;
 
+enum {
+    ERR_NO_INPUT     = -401,     // error: empty data input
+    ERR_NO_ATTR      = -402,     // error: cannot find attribute
+    ERR_INV_TYPE     = -403,     // error: invalid type
+};
 
 // The following functions use the following
 // format for the passed data.
@@ -95,6 +102,7 @@ class TableScan : public Iterator
 
         void getAttributes(vector<Attribute> &attrs) const
         {
+//            __trace();
             attrs.clear();
             attrs = this->attrs;
             unsigned i;
@@ -134,6 +142,8 @@ class IndexScan : public Iterator
             this->tableName = tableName;
             this->attrName = attrName;
 
+//            __trace();
+//            cout << "IndexScan: attrName: " << attrName << endl;
 
             // Get Attributes from RM
             rm.getAttributes(tableName, attrs);
@@ -171,6 +181,7 @@ class IndexScan : public Iterator
 
         void getAttributes(vector<Attribute> &attrs) const
         {
+//            __trace();
             attrs.clear();
             attrs = this->attrs;
             unsigned i;
@@ -200,9 +211,13 @@ class Filter : public Iterator {
         );
         ~Filter(){};
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        Iterator *_iterator;
+        Condition _condition;
 };
 
 
@@ -210,13 +225,81 @@ class Project : public Iterator {
     // Projection operator
     public:
         Project(Iterator *input,                    // Iterator of input R
-              const vector<string> &attrNames){};   // vector containing attribute names
+              const vector<string> &attrNames);   // vector containing attribute names
         ~Project(){};
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator *_iterator;
+        vector<string> _attrNames;
 };
+
+
+// Partition builder: used by GHJoin partitioning phase.
+// On its construction, each partition only has one page of buffer.
+class PartitionBuilder {
+public:
+    PartitionBuilder(const string &partitionName, const vector<Attribute> &attrs);
+    ~PartitionBuilder();
+
+    // Insert tuple into the partition. Buffer page will be automatically
+    // be flushed when it's filled.
+    RC insertTuple(void *tuple);
+
+    // Flush remaining buffer (used in the last step)
+    RC flushLastPage();
+
+    void getAttributes(vector<Attribute> &attrs);
+    string getPartitionName();
+
+private:
+    RC init();  // create the partition file and initialize file handle
+
+private:
+    string _fileName;
+    vector<Attribute> _attrs;
+    FileHandle _fileHandle;
+    RecordBasedFileManager *_rbfm;
+    SpaceManager *_sm;
+    PagedFileManager *_pfm;
+    char _buffer[PAGE_SIZE];
+};
+
+// Partition reader: used by GHJoin probing phase.
+// On its retrieval, all pages will be buffered.
+class PartitionReader {
+public:
+    PartitionReader(const string &partitionName, const vector<Attribute> &attrs);
+    ~PartitionReader();
+
+    // Get next tuple from the partition while caching it in memory
+    RC getNextTuple(void *tuple, RID &rid, unsigned &size);
+    // Get tuple from cache (should first continuously call getNextTuple()
+    // until reaching the end.
+    RC getTupleFromCache(void *tuple, unsigned &size, const RID &rid);
+    void getAttributes(vector<Attribute> &attrs);
+    unsigned getPageCount();
+    string getPartitionName();
+
+private:
+    RC init();  // open the partition file and get the file handle
+
+private:
+    string _fileName;
+    vector<Attribute> _attrs;
+    FileHandle _fileHandle;
+    unsigned _pageCount;
+    unsigned _curPageNum;   // current page number
+    unsigned _curSlotNum;   // current slot number
+
+    RecordBasedFileManager *_rbfm;
+    SpaceManager *_sm;
+    PagedFileManager *_pfm;
+    char **_buffer;     // to hold the whole partition
+};
+
 
 class GHJoin : public Iterator {
     // Grace hash join operator
@@ -225,12 +308,42 @@ class GHJoin : public Iterator {
             Iterator *rightIn,               // Iterator of input S
             const Condition &condition,      // Join condition (CompOp is always EQ)
             const unsigned numPartitions     // # of partitions for each relation (decided by the optimizer)
-      ){};
-      ~GHJoin(){};
+      );
+      ~GHJoin();
 
-      RC getNextTuple(void *data){return QE_EOF;};
+      RC getNextTuple(void *data);
       // For attribute in vector<Attribute>, name it as rel.attr
-      void getAttributes(vector<Attribute> &attrs) const{};
+      void getAttributes(vector<Attribute> &attrs) const;
+
+      enum IterType { LEFT = 0, RIGHT };
+
+    private:
+        RC partition(Iterator *iter, IterType iterType);
+        void allocatePartition(Iterator *iter, IterType iterType);
+        void deallocatePartition(IterType iterType);
+        string getPartitionName(IterType iterType, unsigned num);
+        // 1st hashing
+        unsigned hash1(char *value, unsigned size);
+        // 2nd hashing
+        unsigned hash2(char *value, unsigned size);
+
+    private:
+        // Use join number to handle multiple joins in one query
+        static int _joinNumberGlobal;
+        int _joinNumber;
+
+        Iterator *_leftIn;
+        Iterator *_rightIn;
+        vector<Attribute> _leftAttrs;
+        vector<Attribute> _rightAttrs;
+        Condition _condition;
+        unsigned _numPartitions;
+        vector<PartitionBuilder *> _leftPartitions;
+        vector<PartitionBuilder *> _rightPartitions;
+        PartitionReader * _leftReader;
+        PartitionReader * _rightReader;
+        unsigned _curPartition; // the current partition to read
+        unordered_map<unsigned, vector<RID> > _hashMap;  // the hash map for the second hashing
 };
 
 
@@ -273,7 +386,7 @@ class Aggregate : public Iterator {
         Aggregate(Iterator *input,          // Iterator of input R
                   Attribute aggAttr,        // The attribute over which we are computing an aggregate
                   AggregateOp op            // Aggregate operation
-        ){};
+        );
 
         // Optional for everyone. 5 extra-credit points
         // Group-based hash aggregation
@@ -282,14 +395,33 @@ class Aggregate : public Iterator {
                   Attribute groupAttr,         // The attribute over which we are grouping the tuples
                   AggregateOp op,              // Aggregate operation
                   const unsigned numPartitions // Number of partitions for input (decided by the optimizer)
-        ){};
+        ) {};
+
         ~Aggregate(){};
 
-        RC getNextTuple(void *data){return QE_EOF;};
+        RC getNextTuple(void *data);
         // Please name the output attribute as aggregateOp(aggAttr)
         // E.g. Relation=rel, attribute=attr, aggregateOp=MAX
         // output attrname = "MAX(rel.attr)"
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        RC process();
+
+    private:
+        Iterator *_iterator;
+        Attribute _aggAttr;
+        AggregateOp _op;
+
+        bool _gotResult;      // Check whether we have got the result
+
+        int _count;
+        int _intSum;
+        float _floatSum;
+        int _intMin;
+        float _floatMin;
+        int _intMax;
+        float _floatMax;
 };
 
 #endif

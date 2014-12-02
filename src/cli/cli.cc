@@ -431,6 +431,7 @@ Iterator * CLI::aggregate(Iterator *input) {
     agg = new Aggregate(input, aggAttr, gAttr, op, (unsigned) atoi(string(token).c_str()));
   } else {
     agg = new Aggregate(input, aggAttr, op);
+//    __trace();
   }
   return agg;
 }
@@ -569,12 +570,15 @@ Iterator * CLI::projection(Iterator *input) {
 
 Iterator * CLI::createBaseScanner(const string token) {
   // if token is "IDXSCAN" (index scanner), create index scanner
+//  __trace();
   if (token.compare("IDXSCAN") == 0) {
     string tableName = string(next());
     Condition cond;
     if (createCondition(tableName, cond) != 0)
       error(__LINE__);
 
+//    __trace();
+//    cout << "IDXSCAN attribute name: " << cond.lhsAttr << endl;
     IndexScan *is = new IndexScan(*rm, tableName, cond.lhsAttr);
 
     switch(cond.op) {
@@ -636,13 +640,17 @@ bool CLI::isIterator(const string token, int &code) {
 }
 
 RC CLI::run(Iterator *it) {
-  void *data = malloc(PAGE_SIZE);
+//  void *data = malloc(PAGE_SIZE);
+  char data[PAGE_SIZE];
   vector<Attribute> attrs;
   vector<string> outputBuffer;
   it->getAttributes(attrs);
 
-  for (uint i=0; i < attrs.size(); i++)
+//  __trace();
+//  cout << "Print attributes: " << endl;
+  for (uint i=0; i < attrs.size(); i++) {
     outputBuffer.push_back(attrs[i].name);
+  }
 
   while (it->getNextTuple(data) != QE_EOF) {
     if ( updateOutputBuffer(outputBuffer, data, attrs) != 0)
@@ -881,6 +889,8 @@ RC CLI::createIndex()
 {
   char * tokenizer = next();
   string columnName = string(tokenizer);
+//  __trace();
+//  cout << "ColumnName: " << columnName << endl;
 
   tokenizer = next();
   if (!expect(tokenizer, "on")) {
@@ -892,8 +902,11 @@ RC CLI::createIndex()
 
   // check if columnName, tableName is valid
   RID rid;
-  if (this->checkAttribute(tableName, columnName, rid) == false)
+  if (this->checkAttribute(tableName, columnName, rid) == false) {
+    __trace();
+    cout << "tableName: " << tableName << ", columnName: " << columnName << endl;
     return error("Given tableName-columnName does not exist");
+  }
 
   if (rm->createIndex(tableName, columnName) != 0) {
 	  return error("cannot create index on column(" + columnName + ") , ixManager error");
@@ -1396,6 +1409,8 @@ RC CLI::printIndex() {
   string tableName = string(tokenizer);
 
   RM_IndexScanIterator rmisi;
+//  __trace();
+//  cout << "Goto indexScan(), columnName: " << columnName << endl;
   if (rm->indexScan(tableName, columnName, NULL, NULL, false, false, rmisi) != 0)
 	  return error("error in indexScan::printIndex");
 
@@ -1688,6 +1703,7 @@ RC CLI::history()
 // checks whether given tableName-columnName exists or not in cli_columns or cli_indexes
 bool CLI::checkAttribute(const string tableName, const string columnName, RID &rid, bool searchColumns)
 {
+//  cout << "Checkinging table: " << tableName << ", column: " << columnName << endl;
   string searchTable = CLI_COLUMNS;
   if (searchColumns == false)
     searchTable = CLI_INDEXES;
@@ -1709,10 +1725,10 @@ bool CLI::checkAttribute(const string tableName, const string columnName, RID &r
   memcpy((char *)value, &stringSize, sizeof(unsigned));
   memcpy((char *)value + sizeof(unsigned), columnName.c_str(), stringSize);
 
-  // Find records whose column is columnName
-  if( rm->scan(searchTable, "column_name", EQ_OP, value, stringAttributes, rmsi) != 0)
+  if( rm->scan(searchTable, "column_name", EQ_OP, value, stringAttributes, rmsi) != 0) {
+    cout << "Scan " << searchTable << " failed!" << endl;
     return -1;
-
+  }
   // check if tableName is what we want
   while(rmsi.getNextTuple(rid, data_returned) != RM_EOF){
     int length = 0, offset = 0;
@@ -1726,7 +1742,9 @@ bool CLI::checkAttribute(const string tableName, const string columnName, RID &r
     memcpy(str, (char *)data_returned+offset, length);
     offset += length;
 
+//    cout << "Finding table: " << string(str) << endl;
     if(tableName.compare(string(str)) == 0) {
+//      cout << "Aha find that!" << endl;
       free(data_returned);
       free(str);
       return true;

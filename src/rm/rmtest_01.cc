@@ -58,6 +58,11 @@ void TEST_RM_1(const string &tableName, const int nameLength, const string &name
     // Scan from each index
     printScanResult(tableName);
 
+//    // Delete table
+//    rc = rm->deleteTable(tableName);
+//    assert(rc == success);
+//    cout << "Delete table done" << endl;
+
     // Compare whether the two memory blocks are the same
     if(memcmp(tuple, returnedData, tupleSize) == 0)
     {

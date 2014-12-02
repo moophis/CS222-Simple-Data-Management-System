@@ -701,6 +701,7 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
 
 /**
  * Given a record descriptor, scan a file, i.e., sequentially read all the entries in the file.
+ * (if the value is varchar, the format is [len][real string])
  */
 RC RecordBasedFileManager::scan(FileHandle &fileHandle,
       const vector<Attribute> &recordDescriptor,
@@ -841,6 +842,7 @@ bool RBFM_ScanIterator::meetCriterion(void *page, unsigned short startPos, unsig
         }
     }
     if (!found) {
+        __trace();
         return false;
     }
 
@@ -849,6 +851,7 @@ bool RBFM_ScanIterator::meetCriterion(void *page, unsigned short startPos, unsig
     char data[length];
     if (RecordBasedFileManager::instance()->__readAttribute(page, startPos,
             this->recordDescriptor, conditionAttribute, &data, dataSize) != SUCCESSFUL) {
+        __trace();
         return false;
     }
 
@@ -863,7 +866,13 @@ bool RBFM_ScanIterator::meetCriterion(void *page, unsigned short startPos, unsig
         memcpy(s, (char *)&data + sizeof(int), len);
         str[len] = 0;
         // Here we assume that if value is a string, it's null terminated.
-        matched = evaluateString(string(str), this->compOp, string((char *)this->value));
+        // Read length first then read string
+        memcpy((char *)&len, (char *)this->value, sizeof(int));
+//        cout << "String len: " << len << endl;
+        char val[len+1];
+        memcpy(val, (char *)this->value + sizeof(int), len);
+        val[len] = 0;
+        matched = evaluateString(string(str), this->compOp, string(val));
         break;
     }
     case TypeInt:
@@ -1111,7 +1120,8 @@ RC SpaceManager::allocateSpace(const string &fileName, FileHandle &fileHandle, i
  */
 RC SpaceManager::deallocateSpace(const string &fileName, FileHandle &fileHandle, unsigned pageNum, unsigned slotNum) {
     RC err;
-
+//    __trace();
+//    cout << "File: " << fileName << " pageNum: " << pageNum << ", slotNum: " << slotNum << endl;
     if (!fileHandle.getFilePointer() ||
          fileHandle.getNumberOfPages() < 0 ||
          strcmp(fileName.c_str(), fileHandle.getFileName()) != 0) {
@@ -1407,6 +1417,7 @@ void SpaceManager::initCleanPage(void *page) {
     memset(page, 0, PAGE_SIZE);
     // create a dummy slot for prospect first record
     setFreePtr(page, 0);
-    setSlotCount(page, 1);
-    nullifySlot(page, 0);
+//    setSlotCount(page, 1);
+//    nullifySlot(page, 0);
+    setSlotCount(page, 0);
 }

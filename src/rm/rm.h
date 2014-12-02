@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <utility>
+#include <cstddef>
 
 #include "../rbf/rbfm.h"
 #include "../ix/ix.h"
@@ -131,6 +132,8 @@ private:
   // Insert/delete all index entries associated with one new/old record content
   RC insertIndexEntries(const string &tableName, const vector<Attribute> &attrs, const RID &rid);
   RC deleteIndexEntries(const string &tableName, const vector<Attribute> &attrs, const RID &rid);
+  // Retrieve column name from either [Attribute] or [Relation.Attribute]
+  string retrieveColumnName(const string &attributeName);
 
 // Extra credit
 public:
@@ -217,7 +220,8 @@ private:
 
   // Get table / index file name from table name
   string getTableFileName(const string &tableName);
-  string getIndexName(const string &keyName, const int &tableId);
+  string getIndexName(const string &attributeName, const int &tableId);
+  string getFullAttriuteName(const string &tableName, const string &keyName);
   string getIndexFileName(const string &indexName);
   // Get table file handle (first try to retrieve from cache, if not exist, open the file)
   RC getTableFileHandle(const string &tableName, FileHandle &fileHandle);

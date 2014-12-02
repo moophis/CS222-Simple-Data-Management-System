@@ -53,7 +53,7 @@ RC IndexManager::createFile(const string &fileName, const unsigned &numberOfPage
         return err;
     }
 
-    __trace();
+//    __trace();
     MetadataPage metadataPage(h2);
     metadataPage.initialize(numberOfPages);
 
@@ -67,7 +67,7 @@ RC IndexManager::createFile(const string &fileName, const unsigned &numberOfPage
         return err;
     }
 
-    __trace();
+//    __trace();
     return SUCCESSFUL;
 }
 
