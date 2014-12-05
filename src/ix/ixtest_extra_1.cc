@@ -62,6 +62,8 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
+	int numOfTuplesTobeScanned = 0;
+	
     // insert entry
     numOfTuples = 5000;
     for(unsigned i = 1; i <= numOfTuples; i++)
@@ -82,6 +84,10 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
             cout << "Failed Inserting Keys..." << endl;
         	indexManager->closeFile(ixfileHandle);
         	return fail;
+        }
+        
+        if (count == 20) {
+        	numOfTuplesTobeScanned++;
         }
     }
 
@@ -105,13 +111,29 @@ int testCase_extra_1(const string &indexFileName, const Attribute &attribute)
     	return fail;
     }
 
+	int count1 = 0;
     //iterate
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
         cout << "returned rid: " << rid.pageNum << " " << rid.slotNum << endl;
+        if ( ((rid.pageNum - 1) % 26 + 1) != offset) {
+        	cout << "Wrong entry output... Test failed..." << endl;
+  	    	ix_ScanIterator.close();
+	    	indexManager->closeFile(ixfileHandle);
+	    	indexManager->destroyFile(indexFileName);
+	    	return fail;
+        }
+        count1++;
     }
     cout << endl;
 
+	if (count1 != numOfTuplesTobeScanned) {
+		cout << "Wrong entry output... Test failed..." << endl;
+	    ix_ScanIterator.close();
+	    indexManager->closeFile(ixfileHandle);
+	    indexManager->destroyFile(indexFileName);
+	    return fail;
+	}
     //close scan
     rc = ix_ScanIterator.close();
     if(rc == success)

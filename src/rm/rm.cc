@@ -163,7 +163,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
     int tableId;
     if ((err = getTableId(tableName, tableId)) != SUCCESSFUL) {
         __trace();
-        cout << "err = " << err << endl;
+//        cout << "err = " << err << endl;
         return err;
     }
 
@@ -565,7 +565,7 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
         return err;
     }
 
-    // TODO: scan existing table and build the index accordingly
+    // Scan existing table and build the index accordingly
     RM_ScanIterator rm_ScanIterator;
     vector<string> projected;
     projected.push_back(attributeName);
@@ -600,7 +600,7 @@ RC RelationManager::destroyIndex(const string &tableName, const string &attribut
 
 //    string fullAttrName = getFullAttriuteName(tableName, attributeName);
     if (!doesIndexExist(tableId, attributeName)) {
-        __trace();
+//        __trace();
         return ERR_NO_SUCH_INDEX;
     }
 
@@ -649,7 +649,7 @@ RC RelationManager::indexScan(const string &tableName,
     int tableId;
     if ((err = getTableId(tableName, tableId)) != SUCCESSFUL) {
         __trace();
-        cout << "Scan: Table " << tableName << " does not exist!" << endl;
+//        cout << "Scan: Table " << tableName << " does not exist!" << endl;
         return err;
     }
 

@@ -1,7 +1,7 @@
 
 include ../makefile.inc
 
-all: libqe.a #qetest
+all: libqe.a qetest_1
 
 # lib file dependencies
 libqe.a: libqe.a(qe.o)  # and possibly other .o files
@@ -9,10 +9,10 @@ libqe.a: libqe.a(qe.o)  # and possibly other .o files
 # c file dependencies
 qe.o: qe.h
 
-#qetest.o: qe.h
+qetest.o: qe.h
 
 # binary dependencies
-#qetest: qetest.o libqe.a $(CODEROOT)/ix/libix.a $(CODEROOT)/rm/librm.a $(CODEROOT)/rbf/librbf.a
+qetest_1: qetest_1.o libqe.a $(CODEROOT)/ix/libix.a $(CODEROOT)/rm/librm.a $(CODEROOT)/rbf/librbf.a
 
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a
@@ -29,7 +29,6 @@ $(CODEROOT)/ix/libix.a:
 
 .PHONY: clean
 clean:
-	#-rm qetest *.a *.o *~
-	-rm *.a *.o *~
+	-rm qetest_1 *.a *.o *~
 	$(MAKE) -C $(CODEROOT)/rm clean
-	$(MAKE) -C $(CODEROOT)/ix clean
+	$(MAKE) -C $(CODEROOT)/ix clean 
