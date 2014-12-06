@@ -554,6 +554,73 @@ unsigned GHJoin::hash2(char *value, unsigned size) {
 
 int GHJoin::_joinNumberGlobal = 0;
 
+
+/**
+ * Index nested loop join.
+ */
+INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn, const Condition &condition)
+    : _leftIn(leftIn), _rightIn(rightIn), _condition(condition),
+      _rbfm(RecordBasedFileManager::instance()) {
+    assert(_leftIn != nullptr);
+    assert(_rightIn != nullptr);
+    _leftIn->getAttributes(_leftAttrs);
+    _rightIn->getAttributes(_rightAttrs);
+    assert(_condition.op == EQ_OP);
+    assert(_condition.bRhsIsAttr);
+}
+
+RC INLJoin::getNextTuple(void *data) {
+    char ltuple[PAGE_SIZE];
+    while (_leftIn->getNextTuple(ltuple) != QE_EOF) {
+        unsigned lsize;
+        if (_rbfm->countRecordSize(_leftAttrs, ltuple, lsize) != SUCCESSFUL) {
+            __trace();
+            return QE_EOF;
+        }
+
+        char lval[PAGE_SIZE];
+        unsigned lvalsize = 0;
+        if (readValue(ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
+            __trace();
+            return QE_EOF;
+        }
+
+        // Set up right index scan iterator
+        char rtuple[PAGE_SIZE];
+        _rightIn->setIterator(lval, lval, true, true);
+        if (_rightIn->getNextTuple(rtuple) != QE_EOF) {
+            unsigned rsize;
+            if (_rbfm->countRecordSize(_rightAttrs, rtuple, rsize) != SUCCESSFUL) {
+                __trace();
+                return QE_EOF;
+            }
+
+            char rval[PAGE_SIZE];
+            unsigned rvalsize = 0;
+            if (readValue(rtuple, rval, _condition.rhsAttr, _rightAttrs, rvalsize) != SUCCESSFUL) {
+                __trace();
+                return QE_EOF;
+            }
+
+            // Compare left and right value
+            if (isEqual(lval, lvalsize, rval, rvalsize)) {
+                // Find a match, join two tuples
+                appendValue(data, 0, ltuple, lsize);
+                appendValue(data, lsize, rtuple, rsize);
+                return SUCCESSFUL;
+            }
+        }
+    }
+    return QE_EOF;
+}
+
+void INLJoin::getAttributes(vector<Attribute> &attrs) const {
+    attrs.clear();
+    // [Left.attr1, Left.attr2, ..., Right.attr1, ...]
+    attrs.insert(attrs.begin(), _rightAttrs.begin(), _rightAttrs.end());
+    attrs.insert(attrs.begin(), _leftAttrs.begin(), _leftAttrs.end());
+}
+
 /**
  * Aggregate
  */
@@ -580,10 +647,8 @@ RC Aggregate::getNextTuple(void *data) {
         case MIN:
             if (_aggAttr.type == TypeInt) {
                 memcpy((char *)data, (char *) &_intMin, sizeof(int));
-//                cout << "MIN: " << *((int *) data) << endl;
             } else {
                 memcpy((char *)data, (char *) &_floatMin, sizeof(float));
-//                cout << "MIN: " << *((float *) data) << endl;
             }
             break;
         case MAX:
@@ -611,8 +676,6 @@ RC Aggregate::getNextTuple(void *data) {
             break;
         case COUNT:
             memcpy((char *)data, (char *) &_count, sizeof(int));
-//            cout << "COUNT: " << (*(int *)data) << endl;
-//            cout << "COUNT float: " << (*(float *) data) << endl;
             break;
         default:
 //            __trace();
@@ -645,12 +708,6 @@ RC Aggregate::process() {
 
     vector<Attribute> attrs;
     _iterator->getAttributes(attrs);
-
-//    cout << "Attributes: " << endl;
-//    for (unsigned i = 0; i < attrs.size(); i++) {
-//        cout << attrs[i].name << endl;
-//    }
-//    cout << "Agg attr: " << _aggAttr.name << endl;
 
     char data[PAGE_SIZE];
     while (_iterator->getNextTuple(data) != QE_EOF) {

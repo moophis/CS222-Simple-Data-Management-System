@@ -1,11 +1,9 @@
-//#include <fstream>
-//#include <iostream>
-
+#include <fstream>
+#include <iostream>
 #include <vector>
-
-//#include <cstdlib>
-//#include <cstdio>
-//#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 
 #include "qe.h"
 
@@ -73,7 +71,7 @@ int populateLeftTable(vector<RID> &rids) {
 	// 1. InsertTuple
 	RC rc = success;
 	RID rid;
-
+	
 	void *buf = malloc(bufSize);
 	for (int i = 0; i < tupleCount; ++i) {
 		memset(buf, 0, bufSize);
@@ -107,25 +105,29 @@ int QE_TEST_1(vector<RID> &rids) {
 	RC rc = success;
 	string tableName = "left";
 	void *data = malloc(bufSize);
-	IndexScan *leftIn = new IndexScan(*rm, "left", "B");
 
 	// Create the left table
 	if (createLeftTable() != success)
 	{
 		cout << "** TEST_RM_PRIVATE_1 failed :-( **" << endl << endl;
-		goto clean_up;
+		free(data);
+		return -1;		
 	}
 
 	// Populate the table
-	if (populateLeftTable(rids) != success) {
+	if (populateLeftTable(rids) != success) 
+	{
 		cout << "** TEST_RM_PRIVATE_1 failed :-( **" << endl << endl;
-		goto clean_up;
+		free(data);
+		return -1;	
 	}
 
 	// Create the left index
-	if (createIndexforLeftB() != success) {
+	if (createIndexforLeftB() != success)
+	 {
 		cout << "** TEST_RM_PRIVATE_1 failed :-( **" << endl << endl;
-		goto clean_up;
+		free(data);
+		return -1;	
 	}
 
 	// delete tuples
@@ -134,35 +136,31 @@ int QE_TEST_1(vector<RID> &rids) {
 		if (i % 2 == 0)
 		{
 			rc = rm->deleteTuple(tableName, rids[i]);
-			if (rc != success)
+			if (rc != success) 
 			{
 				cout << "** TEST_RM_PRIVATE_1 failed :-( **" << endl << endl;
-				goto clean_up;
+				free(data);
+				return -1;
         		}
 		}
         }
 
 	// IndexScan()
+	IndexScan *leftIn = new IndexScan(*rm, "left", "B");
 	while (leftIn->getNextTuple(data) != QE_EOF)
 	{
 		int val = *(int *) ((char *) data + 4);
 		if (val % 2 == 0)
 		{
 			cout << "**** Test Case 1 Failed :-( ****" << endl;
-			goto clean_up;
-		}
-
-		cout << "left.B " << val << endl;
-	}
-
-
-	if (rc != success) {
-		return rc;
+			delete leftIn;			
+			free(data);
+			return -1;
+		}		
+		cout << "left.B = " << val << endl;
 	}
 
 	cout << "**** Test Case 1 passed :-) ****" << endl;
-
-clean_up:
 	delete leftIn;
 	free(data);
 	return rc;
