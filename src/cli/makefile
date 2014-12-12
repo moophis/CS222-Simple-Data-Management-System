@@ -80,6 +80,7 @@ $(CODEROOT)/qe/libqe.a:
 .PHONY: clean
 clean:
 	-rm clitest_01 clitest_02 clitest_03 clitest_04 clitest_05 clitest_06 clitest_07 clitest_08 clitest_09 clitest_10 clitest_11 clitest_12 start *.a *.o *~
+	./cleanup.sh
 	$(MAKE) -C $(CODEROOT)/rbf clean
 	$(MAKE) -C $(CODEROOT)/rm clean
 	$(MAKE) -C $(CODEROOT)/ix clean

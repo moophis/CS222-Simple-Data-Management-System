@@ -4,9 +4,19 @@
 /**
  * Utitliy functions
  */
+static void printValue(void *data, unsigned size) {
+    char val[size+1];
+    memcpy(val, (char *)data, size);
+    val[size] = 0;
+    for (unsigned i = 0; i < size; i++) {
+        cout << (int) val[i] << " ";
+    }
+    cout << endl;
+}
+
 // Read an attribute value given attribute name as well as the descriptor
 // Return: value data and value data length
-static RC readValue(void *data, void *value, const string &attrName,
+static RC readValue(const void *data, const void *value, const string &attrName,
         const vector<Attribute> &attrs, unsigned &valueLength) {
     if (data == nullptr) {
         return ERR_NO_INPUT;
@@ -368,11 +378,14 @@ GHJoin::GHJoin(Iterator *leftIn,
     assert(_condition.op == EQ_OP);
     assert(_condition.bRhsIsAttr);
 
+    _curLeftMapIndex = 0;
+
     // Partition first
     allocatePartition(leftIn, LEFT);
     allocatePartition(rightIn, RIGHT);
     assert(partition(leftIn, LEFT) == SUCCESSFUL);
     assert(partition(rightIn, RIGHT) == SUCCESSFUL);
+
 }
 
 GHJoin::~GHJoin() {
@@ -381,8 +394,17 @@ GHJoin::~GHJoin() {
     deallocatePartition(RIGHT);
 }
 
+// Buffers used in GHJoin
+char GHJoin::_rtuple[PAGE_SIZE];
+unsigned GHJoin::_rsize = 0;
+
 // Now assume that left partitions are always used for building hash map.
 RC GHJoin::getNextTuple(void *data) {
+    // Process cached value first (if possible)
+    if (_leftReader != nullptr && _rightReader != nullptr
+            && matchTuples(data) == SUCCESSFUL) {
+        return SUCCESSFUL;
+    }
     while (_curPartition < _numPartitions) {
         // Check if we need to load a new partition
         if (_leftReader == nullptr && _rightReader == nullptr) {
@@ -407,38 +429,11 @@ RC GHJoin::getNextTuple(void *data) {
 
         // Rehash tuples from right partition and find a match
         RID rrid;
-        char rtuple[PAGE_SIZE];
-        unsigned rsize;
-        while (_rightReader->getNextTuple(rtuple, rrid, rsize) != QE_EOF) {
+        while (_rightReader->getNextTuple(_rtuple, rrid, _rsize) != QE_EOF) {
             // Get right value
-            char rval[PAGE_SIZE];
-            unsigned rvalsize = 0;
-            if (readValue(rtuple, rval, _condition.rhsAttr, _rightAttrs, rvalsize) != SUCCESSFUL) {
-                __trace();
-                return QE_EOF;
-            }
-            unsigned p = hash2(rval, rvalsize);
-            vector<RID> &leftRIDs = _hashMap[p];
-            // Get left value and compare
-            for (auto it = leftRIDs.begin(); it != leftRIDs.end(); ++it) {
-                char ltuple[PAGE_SIZE];
-                unsigned lsize = 0;
-                if (_leftReader->getTupleFromCache(ltuple, lsize, *it) != SUCCESSFUL) {
-                    __trace();
-                    return QE_EOF;
-                }
-                char lval[PAGE_SIZE];
-                unsigned lvalsize = 0;
-                if (readValue(ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
-                    __trace();
-                    return QE_EOF;
-                }
-                if (isEqual(lval, lvalsize, rval, rvalsize)) {
-                    // Find a match, join two tuples
-                    appendValue(data, 0, ltuple, lsize);
-                    appendValue(data, lsize, rtuple, rsize);
-                    return SUCCESSFUL;
-                }
+            _curLeftMapIndex = 0;  // Reset the map index
+            if (matchTuples(data) == SUCCESSFUL) {
+                return SUCCESSFUL;
             }
         }
 
@@ -457,6 +452,43 @@ RC GHJoin::getNextTuple(void *data) {
         _curPartition++;
     }
 
+    return QE_EOF;
+}
+
+RC GHJoin::matchTuples(void *data) {
+    char rval[PAGE_SIZE];
+    unsigned rvalsize = 0;
+    if (readValue(_rtuple, rval, _condition.rhsAttr, _rightAttrs, rvalsize) != SUCCESSFUL) {
+        __trace();
+        return QE_EOF;
+    }
+
+    unsigned p = hash2(rval, rvalsize);
+    vector<RID> &leftRIDs = _hashMap[p];
+    // Get left value and compare
+    for (; _curLeftMapIndex < leftRIDs.size(); ++_curLeftMapIndex) {
+        char ltuple[PAGE_SIZE];
+        unsigned lsize = 0;
+        if (_leftReader->getTupleFromCache(ltuple, lsize, leftRIDs[_curLeftMapIndex]) != SUCCESSFUL) {
+            __trace();
+            _curLeftMapIndex = leftRIDs.size();
+            return QE_EOF;
+        }
+        char lval[PAGE_SIZE];
+        unsigned lvalsize = 0;
+        if (readValue(ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
+            __trace();
+            _curLeftMapIndex = leftRIDs.size();
+            return QE_EOF;
+        }
+        if (isEqual(lval, lvalsize, rval, rvalsize)) {
+            // Find a match, join two tuples
+            appendValue(data, 0, ltuple, lsize);
+            appendValue(data, lsize, _rtuple, _rsize);
+            ++_curLeftMapIndex;
+            return SUCCESSFUL;
+        }
+    }
     return QE_EOF;
 }
 
@@ -560,7 +592,7 @@ int GHJoin::_joinNumberGlobal = 0;
  */
 INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn, const Condition &condition)
     : _leftIn(leftIn), _rightIn(rightIn), _condition(condition),
-      _rbfm(RecordBasedFileManager::instance()) {
+     _rbfm(RecordBasedFileManager::instance()) {
     assert(_leftIn != nullptr);
     assert(_rightIn != nullptr);
     _leftIn->getAttributes(_leftAttrs);
@@ -569,46 +601,28 @@ INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn, const Condition &conditio
     assert(_condition.bRhsIsAttr);
 }
 
-RC INLJoin::getNextTuple(void *data) {
-    char ltuple[PAGE_SIZE];
-    while (_leftIn->getNextTuple(ltuple) != QE_EOF) {
-        unsigned lsize;
-        if (_rbfm->countRecordSize(_leftAttrs, ltuple, lsize) != SUCCESSFUL) {
-            __trace();
-            return QE_EOF;
-        }
+char INLJoin::_ltuple[PAGE_SIZE];
+unsigned INLJoin::_lsize = 0;
 
+RC INLJoin::getNextTuple(void *data) {
+    static bool initialized = false;
+    // Deal with remaining of inner relation index scan
+    if (initialized && matchTuples(data) == SUCCESSFUL) {
+        return SUCCESSFUL;
+    }
+    initialized = true;
+    while (_leftIn->getNextTuple(_ltuple) != QE_EOF) {
         char lval[PAGE_SIZE];
         unsigned lvalsize = 0;
-        if (readValue(ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
+        if (readValue(_ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
             __trace();
             return QE_EOF;
         }
 
         // Set up right index scan iterator
-        char rtuple[PAGE_SIZE];
         _rightIn->setIterator(lval, lval, true, true);
-        if (_rightIn->getNextTuple(rtuple) != QE_EOF) {
-            unsigned rsize;
-            if (_rbfm->countRecordSize(_rightAttrs, rtuple, rsize) != SUCCESSFUL) {
-                __trace();
-                return QE_EOF;
-            }
-
-            char rval[PAGE_SIZE];
-            unsigned rvalsize = 0;
-            if (readValue(rtuple, rval, _condition.rhsAttr, _rightAttrs, rvalsize) != SUCCESSFUL) {
-                __trace();
-                return QE_EOF;
-            }
-
-            // Compare left and right value
-            if (isEqual(lval, lvalsize, rval, rvalsize)) {
-                // Find a match, join two tuples
-                appendValue(data, 0, ltuple, lsize);
-                appendValue(data, lsize, rtuple, rsize);
-                return SUCCESSFUL;
-            }
+        if (matchTuples(data) == SUCCESSFUL) {
+            return SUCCESSFUL;
         }
     }
     return QE_EOF;
@@ -619,6 +633,45 @@ void INLJoin::getAttributes(vector<Attribute> &attrs) const {
     // [Left.attr1, Left.attr2, ..., Right.attr1, ...]
     attrs.insert(attrs.begin(), _rightAttrs.begin(), _rightAttrs.end());
     attrs.insert(attrs.begin(), _leftAttrs.begin(), _leftAttrs.end());
+}
+
+RC INLJoin::matchTuples(void *data) {
+    if (_rbfm->countRecordSize(_leftAttrs, _ltuple, _lsize) != SUCCESSFUL) {
+        __trace();
+        return QE_EOF;
+    }
+
+    char lval[PAGE_SIZE];
+    unsigned lvalsize = 0;
+    if (readValue(_ltuple, lval, _condition.lhsAttr, _leftAttrs, lvalsize) != SUCCESSFUL) {
+        __trace();
+        return QE_EOF;
+    }
+
+    char rtuple[PAGE_SIZE];
+    if (_rightIn->getNextTuple(rtuple) != QE_EOF) {
+        unsigned rsize;
+        if (_rbfm->countRecordSize(_rightAttrs, rtuple, rsize) != SUCCESSFUL) {
+            __trace();
+            return QE_EOF;
+        }
+
+        char rval[PAGE_SIZE];
+        unsigned rvalsize = 0;
+        if (readValue(rtuple, rval, _condition.rhsAttr, _rightAttrs, rvalsize) != SUCCESSFUL) {
+            __trace();
+            return QE_EOF;
+        }
+
+        // Compare left and right value
+        if (isEqual(lval, lvalsize, rval, rvalsize)) {
+            // Find a match, join two tuples
+            appendValue(data, 0, _ltuple, _lsize);
+            appendValue(data, _lsize, rtuple, rsize);
+            return SUCCESSFUL;
+        }
+    }
+    return QE_EOF;
 }
 
 /**

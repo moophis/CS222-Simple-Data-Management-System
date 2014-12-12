@@ -30,5 +30,6 @@ $(CODEROOT)/ix/libix.a:
 .PHONY: clean
 clean:
 	-rm qetest_1 *.a *.o *~
+	./cleanup.sh
 	$(MAKE) -C $(CODEROOT)/rm clean
 	$(MAKE) -C $(CODEROOT)/ix clean 

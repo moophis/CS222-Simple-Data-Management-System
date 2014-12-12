@@ -642,7 +642,6 @@ RC IndexManager::rebalanceWithin(IXFileHandle &ixfileHandle, unsigned bucket,
     // Check whether the bucket is empty
     emptyBucket = isEmptyBucket(cache);
     if (emptyBucket) {
-        __trace();
         return SUCCESSFUL;
     }
 

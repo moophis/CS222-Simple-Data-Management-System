@@ -37,7 +37,7 @@ void Test07()
 
   exec("create table salary Salary = int, Explanation = varchar(50)");
 
-  exec("load employee employee_5");
+  exec("load employee employee_5"); // employee_5
 
   exec("load ages ages_90");
 

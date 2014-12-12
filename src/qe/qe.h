@@ -327,6 +327,8 @@ class GHJoin : public Iterator {
         // 2nd hashing
         unsigned hash2(char *value, unsigned size);
 
+        RC matchTuples(void *data);   // Internal helper function.
+
     private:
         // Use join number to handle multiple joins in one query
         static int _joinNumberGlobal;
@@ -344,6 +346,11 @@ class GHJoin : public Iterator {
         PartitionReader * _rightReader;
         unsigned _curPartition; // the current partition to read
         unordered_map<unsigned, vector<RID> > _hashMap;  // the hash map for the second hashing
+
+        // Buffered right tuple (Assume that always load left relations into the hash map)
+        static char _rtuple[PAGE_SIZE];
+        static unsigned _rsize;
+        unsigned _curLeftMapIndex;
 };
 
 
@@ -377,13 +384,23 @@ class INLJoin : public Iterator {
         void getAttributes(vector<Attribute> &attrs) const;
 
     private:
+        RC matchTuples(void *data);
+
+    private:
         Iterator *_leftIn;
         IndexScan *_rightIn;
         Condition _condition;
         vector<Attribute> _leftAttrs;
         vector<Attribute> _rightAttrs;
 
+//        // Whether the rightIn has been called setIterator()
+//        bool _initialized;
+
         RecordBasedFileManager *_rbfm;
+
+        // Buffer for left relation tuples
+        static char _ltuple[PAGE_SIZE];
+        static unsigned _lsize;
 };
 
 
