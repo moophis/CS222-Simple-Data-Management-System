@@ -49,6 +49,9 @@ void Test09()
 //
   exec("SELECT AGG (PROJECT employee GET [ Salary ]) GET AVG(Salary)");
 
+  // New added
+//  exec("SELECT AGG (PROJECT employee GET [ Height ]) GET AVG(Height)");
+
   exec("SELECT AGG (PROJECT employee GET [ * ]) GET COUNT(Height)");
 
   exec(("drop table employee"));

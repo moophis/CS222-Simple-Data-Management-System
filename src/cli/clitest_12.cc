@@ -36,7 +36,7 @@ void Test12()
   exec("create table salary Salary = int, Explanation = varchar(50)");
 
   exec("load employee employee_5");
-  exec("load ages ages_90");
+  exec("load ages ages_90");  // ages_91
   exec("load salary salary_5");
 
   exec("create index Age on employee");

@@ -4,16 +4,6 @@
 /**
  * Utitliy functions
  */
-static void printValue(void *data, unsigned size) {
-    char val[size+1];
-    memcpy(val, (char *)data, size);
-    val[size] = 0;
-    for (unsigned i = 0; i < size; i++) {
-        cout << (int) val[i] << " ";
-    }
-    cout << endl;
-}
-
 // Read an attribute value given attribute name as well as the descriptor
 // Return: value data and value data length
 static RC readValue(const void *data, const void *value, const string &attrName,
@@ -719,13 +709,13 @@ RC Aggregate::getNextTuple(void *data) {
             }
             break;
         case AVG:
+            float avg;
             if (_aggAttr.type == TypeInt) {
-                int avg = _intSum / _count;
-                memcpy((char *)data, (char *) &avg, sizeof(int));
+                avg = (float) _intSum / (float) (_count);
             } else {
-                float avg = static_cast<float>(_floatSum / _count);
-                memcpy((char *)data, (char *) &avg, sizeof(float));
+                avg = static_cast<float>(_floatSum / _count);
             }
+            memcpy((char *)data, (char *) &avg, sizeof(float));
             break;
         case COUNT:
             memcpy((char *)data, (char *) &_count, sizeof(int));
@@ -750,7 +740,13 @@ void Aggregate::getAttributes(vector<Attribute> &attrs) const {
 //    cout << ss.str() << endl;
     Attribute attr;
     attr.name = ss.str();
-    attr.type = (_op == COUNT) ? TypeInt : _aggAttr.type;
+    if (_op == COUNT) {
+        attr.type = TypeInt;
+    } else if (_op == AVG && _aggAttr.type != TypeVarChar) {
+        attr.type = TypeReal;
+    } else {
+        attr.type = _aggAttr.type;
+    }
     attr.length = _aggAttr.length;
     attrs.clear();
     attrs.push_back(attr);
@@ -795,6 +791,3 @@ RC Aggregate::process() {
 
     return SUCCESSFUL;
 }
-
-
-
