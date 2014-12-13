@@ -1,0 +1,22 @@
+Project 4 Report
+=========================
+
+Project 4 has two phases:
+* Phase One: Incorporate IX support to RM layer
+* Phase Two: Support relational operations
+The operations implemented in this project:
+    - Filter
+    - Project
+    - Grace Hash Join
+    - Index Nested Loop Join
+    - Basic Aggregate
+Not implemented:
+    - Block Nested Loop Join
+    - Aggregate with GROUP BY
+
+Testing Instruction
+=========================
+Since I do not implement BNLJoin and Aggragate (Group by version), clitest_08 and clitest_10
+should fail in the middle. So please directly ignore those two tests. Or if any of the tests
+crashes, please run ./cleanup.sh to delete any table files so that this failure cannot 
+influence the results of the following tests.
